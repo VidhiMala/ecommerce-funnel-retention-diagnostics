@@ -1,0 +1,25 @@
+# Data: far too large for Git; reproduced via the download step in README
+data/
+*.parquet
+*.csv.gz
+*.zip
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Credentials: never commit
+kaggle.json
+.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Office temp/lock files
+~$*
