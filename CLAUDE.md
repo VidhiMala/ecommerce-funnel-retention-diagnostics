@@ -63,6 +63,11 @@ Every day ends with commit + push and an update to Status below.
 - Currency: report in the dataset's original currency (expected USD; verify on Kaggle page). No FX conversion: an exchange rate would add an unsourced assumption.
 - Data work runs on the user's machine; the cloud session's network can't reach Kaggle.
 - Upgrade plan: `docs/upgrade_plan.md` (must-do: #1, #2, #3).
+- **Metric definitions, approved by the user 2026-11-16.** Copy these verbatim into `docs/metric_definitions.md` when it's created on Day 3:
+  1. **Time zone:** all timestamps stay in UTC (the raw data carries a `UTC` suffix). Every time-based chart and table is labelled "UTC". No local-time conversion.
+  2. **Order (proxy):** one purchasing session, i.e. a `user_session` containing ≥1 `purchase` event, counts as one order. Always state that this is a proxy, **not a verified order count**, because `order_id` is unavailable.
+  3. **Estimated purchase revenue:** sum of `price` over `purchase` events where `price > 0`, assuming one unit per purchase row (no `quantity` column). Rows with `price ≤ 0` are excluded from this metric but **kept and flagged** in the dataset. The excluded record count and their summed value are always reported separately.
+- **Cleaning gate (user rule, 2026-11-16):** no cleaning or modification of data until the user has seen the audit results and approved the proposed cleaning rules. Raw CSVs are never modified; cleaned output goes to new files only.
 - Scope additions approved 2026-11-15: propensity model (DS) and A/B test plan (PA). If time runs short, cut Streamlit/CI first, not these.
 
 ## Status
@@ -72,8 +77,8 @@ Every day ends with commit + push and an update to Status below.
 - [x] Day 1: GitHub repo created: `VidhiMala/ecommerce-funnel-retention-diagnostics` (public), starter files committed
 - [x] Day 1: environment set up, data downloaded (4 files, 16,536,158 rows), raw profile pushed (`reports/day01_raw_profile.txt`)
 - [x] Day 1: `docs/data_dictionary.md` and `docs/data_quality_notes.md` written; every figure traced to the report
-- [ ] Day 1 close-out: user reviews both docs; answer open questions
-- [ ] Day 2: quality audit (checklist at the end of `docs/data_quality_notes.md`), cleaning rules, clean → Parquet, cleaning log  ← **NEXT**
+- [x] Day 1 close-out: user reviewed both docs and approved the three metric definitions. **Day 1 approved 2026-11-16.**
+- [ ] Day 2 (Nov 17), step by step: (1) audit script → user runs → Claude verifies the results; (2) proposed cleaning rules → **user approval**; (3) cleaning to Parquet → verify; (4) cleaning log  ← **NEXT**
 
 ## Conversation log (key points, newest last)
 - **2026-11-15:**
@@ -94,4 +99,5 @@ Every day ends with commit + push and an update to Status below.
   - Data downloaded and profiled by the user: Oct 4,102,283 · Nov 4,635,837 · Dec 3,533,286 · Jan 4,264,752 rows; total 16,536,158. Identical 9-column schema in all files.
   - Key findings: `category_code` 98.25–98.37% null (use `category_id`); `brand` 40.45–42.84% null; min price −79.37 every month; `user_session` 0.02–0.03% null; cart events = 54–66% of views (use "ever reached" funnels, not event ratios); no `order_id` or `quantity` column; timestamps are UTC; Dec volume lower (cause to check); `remove_from_cart` exists, so upgrade 1A is feasible.
   - Proposed defaults (not yet applied): keep UTC; order = a session with ≥1 purchase; revenue = sum of price over valid purchases; exclude price ≤ 0 from revenue.
+  - User reviewed and approved the data dictionary and quality notes. Approved metric definitions: UTC; order = purchasing session (proxy, not verified); revenue = positive purchase prices, 1 unit per row, non-positive prices kept and flagged and reported separately. Day 1 closed.
 
