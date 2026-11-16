@@ -70,7 +70,10 @@ Every day ends with commit + push and an update to Status below.
 - [x] `src/inspect_raw.py` written and smoke-tested (on a dummy file only)
 - [x] Day 1 scaffold: folders, .gitignore, requirements.txt, README stub
 - [x] Day 1: GitHub repo created: `VidhiMala/ecommerce-funnel-retention-diagnostics` (public), starter files committed
-- [ ] Day 1: environment set up, data downloaded, raw profile shared with Claude  ← **NEXT**
+- [x] Day 1: environment set up, data downloaded (4 files, 16,536,158 rows), raw profile pushed (`reports/day01_raw_profile.txt`)
+- [x] Day 1: `docs/data_dictionary.md` and `docs/data_quality_notes.md` written; every figure traced to the report
+- [ ] Day 1 close-out: user reviews both docs; answer open questions
+- [ ] Day 2: quality audit (checklist at the end of `docs/data_quality_notes.md`), cleaning rules, clean → Parquet, cleaning log  ← **NEXT**
 
 ## Conversation log (key points, newest last)
 - **2026-11-15:**
@@ -88,5 +91,7 @@ Every day ends with commit + push and an update to Status below.
   - Kaggle CLI 2.x login is `kaggle auth login`, not `kaggle.json`.
   - User asked whether 10 days at 4–5 hrs is enough: no. User chose **12 days, full scope, finishing Nov 27**.
   - Repo created by the user: `VidhiMala/ecommerce-funnel-retention-diagnostics`. Checked it was empty before the first commit.
-  - Waiting on the user for: the Kaggle file-list output (Day 1, Step 3).
+  - Data downloaded and profiled by the user: Oct 4,102,283 · Nov 4,635,837 · Dec 3,533,286 · Jan 4,264,752 rows; total 16,536,158. Identical 9-column schema in all files.
+  - Key findings: `category_code` 98.25–98.37% null (use `category_id`); `brand` 40.45–42.84% null; min price −79.37 every month; `user_session` 0.02–0.03% null; cart events = 54–66% of views (use "ever reached" funnels, not event ratios); no `order_id` or `quantity` column; timestamps are UTC; Dec volume lower (cause to check); `remove_from_cart` exists, so upgrade 1A is feasible.
+  - Proposed defaults (not yet applied): keep UTC; order = a session with ≥1 purchase; revenue = sum of price over valid purchases; exclude price ≤ 0 from revenue.
 
