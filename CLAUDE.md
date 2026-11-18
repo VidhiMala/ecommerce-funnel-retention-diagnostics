@@ -79,9 +79,9 @@ Every day ends with commit + push and an update to Status below.
 - [x] Day 1: `docs/data_dictionary.md` and `docs/data_quality_notes.md` written; every figure traced to the report
 - [x] Day 1 close-out: user reviewed both docs and approved the three metric definitions. **Day 1 approved 2026-11-16.**
 - [x] Day 2 step 1a: `src/config.py`, `src/audit_raw.py` (read-only audit, 11 checks) and `tests/test_audit_raw.py` (14 tests on a synthetic fixture) written. Full-scale synthetic run (16.5M rows): ~60s, peak memory ~4.3 GB at the 4 GB DuckDB limit; output deterministic across runs.
-- [ ] Day 2 step 1b: user runs `python -m src.audit_raw` locally and pushes `reports/day02_audit_report.md` + `reports/day02_audit/`; Claude verifies  ← **NEXT**
-- [ ] Day 2 step 2: proposed cleaning rules (backed by audit numbers) → **user approval**
-- [ ] Day 2 step 3: cleaning to Parquet → verify against the audit; step 4: cleaning log
+- [x] Day 2 step 1b: user ran the audit locally and pushed `reports/day02_audit_report.md` + `reports/day02_audit/` (commit fdc0492). Claude verified it: 24/24 checks pass against the Day 1 profile and for internal consistency. **Day 2 closed by the user 2026-11-18.** The cleaning rules, Parquet output and cleaning log move to Day 3.
+- [ ] Day 3 step 1: cleaning rules C1–C12 proposed in chat (2026-11-18), **awaiting user approval**  ← **NEXT**
+- [ ] Day 3 remaining (after approval): `docs/cleaning_rules.md`; `src/clean.py` → `data/processed/events_clean/`; cleaning log; tests; `docs/metric_definitions.md`; pipeline skeleton + CI; data manifest
 
 ## Conversation log (key points, newest last)
 - **2026-11-15:**
@@ -108,4 +108,5 @@ Every day ends with commit + push and an update to Status below.
   - The audit stages the CSVs into `data/interim/raw_stage.duckdb`: a typed copy with values unchanged (not cleaning). Raw CSVs are read-only.
   - DuckDB memory limit lowered from 6 GB to 4 GB to leave room on the 16 GB laptop.
   - Reports never print absolute paths, which keeps local user names out of the public repo.
+  - Audit headline facts (verified): 0 timestamp problems, 0 near-duplicates, 0 empty strings, 0 zero-event hours; 868,808 exact-duplicate extra rows (782,059 of them `remove_from_cart`); 94 negative-price rows on 5 products that never have a positive price; 32,903 zero-price rows; 3,543 null-session rows (no purchases among them); 191 sessions with 2+ users; brand back-fillable rows 54,537; 1,614 products in 2+ category_ids; Dec 26–Jan 1 low-volume trough; raw revenue 5,144,461.71 over 1,044,922 positive-price purchase rows.
 
