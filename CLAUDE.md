@@ -80,8 +80,10 @@ Every day ends with commit + push and an update to Status below.
 - [x] Day 1 close-out: user reviewed both docs and approved the three metric definitions. **Day 1 approved 2026-11-16.**
 - [x] Day 2 step 1a: `src/config.py`, `src/audit_raw.py` (read-only audit, 11 checks) and `tests/test_audit_raw.py` (14 tests on a synthetic fixture) written. Full-scale synthetic run (16.5M rows): ~60s, peak memory ~4.3 GB at the 4 GB DuckDB limit; output deterministic across runs.
 - [x] Day 2 step 1b: user ran the audit locally and pushed `reports/day02_audit_report.md` + `reports/day02_audit/` (commit fdc0492). Claude verified it: 24/24 checks pass against the Day 1 profile and for internal consistency. **Day 2 closed by the user 2026-11-18.** The cleaning rules, Parquet output and cleaning log move to Day 3.
-- [ ] Day 3 step 1: cleaning rules C1–C12 proposed in chat (2026-11-18), **awaiting user approval**  ← **NEXT**
-- [ ] Day 3 remaining (after approval): `docs/cleaning_rules.md`; `src/clean.py` → `data/processed/events_clean/`; cleaning log; tests; `docs/metric_definitions.md`; pipeline skeleton + CI; data manifest
+- [x] Day 3 step 1: cleaning rules C1–C12 + A1, A2 **approved by the user 2026-11-18** (A2 wording: "purchasing sessions", not an exact order count). Step 7 (data manifest) approved.
+- [x] Day 3 code (Claude, tested on synthetic data only): `docs/cleaning_rules.md`, `src/clean.py` (37 validations; output replaced only if all pass), `src/manifest.py`, `src/pipeline.py`, `docs/metric_definitions.md` (abandonment window **pending**: options W1–W4), CI workflow, README reproduction steps. Tests: 34 pass + 12 real-data tests that skip without data. Full-scale synthetic run: clean ~96s, peak ~4.3 GB.
+- [ ] Day 3 user run: `python -m src.manifest create` → `python -m src.pipeline` → `python -m pytest` (real-data tests must pass) → push `docs/data_manifest.*`, `reports/day03_cleaning_log.md`, `reports/day03_cleaning/` → Claude verifies the real results  ← **NEXT**
+- [ ] Open decisions: cart-abandonment window (W1–W4, decide at the start of Day 6 after measuring cart→purchase delay); whether cart-leakage value uses `event_copies` (Day 6); proposed metrics in `docs/metric_definitions.md` §3 (confirm on Days 4–5)
 
 ## Conversation log (key points, newest last)
 - **2026-11-15:**
@@ -109,4 +111,6 @@ Every day ends with commit + push and an update to Status below.
   - DuckDB memory limit lowered from 6 GB to 4 GB to leave room on the 16 GB laptop.
   - Reports never print absolute paths, which keeps local user names out of the public repo.
   - Audit headline facts (verified): 0 timestamp problems, 0 near-duplicates, 0 empty strings, 0 zero-event hours; 868,808 exact-duplicate extra rows (782,059 of them `remove_from_cart`); 94 negative-price rows on 5 products that never have a positive price; 32,903 zero-price rows; 3,543 null-session rows (no purchases among them); 191 sessions with 2+ users; brand back-fillable rows 54,537; 1,614 products in 2+ category_ids; Dec 26–Jan 1 low-volume trough; raw revenue 5,144,461.71 over 1,044,922 positive-price purchase rows.
+  - User approved C1–C12, A1 and A2 (purchasing sessions = `user_id`+`user_session` with ≥1 valid purchase; never called an exact order count) and the data manifest. Extra requirements: raw untouched; `SUM(event_copies)` = 16,536,158; keep raw and deduplicated counts; nothing silently discarded; revenue consistent before and after; stop on any validation failure; abandonment window not finalised without presenting options.
+  - Testing found and fixed: SQL alias error; results whose order could change between runs (UNION ALL); counts printed as floats; a NaN in the data-quality test. A synthetic month-boundary bug was correctly caught by validation (output refused).
 

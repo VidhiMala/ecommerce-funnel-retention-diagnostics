@@ -5,7 +5,7 @@
 - **[D]** derived by arithmetic from [O] values
 - **[A]** assumption, to be verified
 
-**Status:** issues **identified only**. No cleaning has been applied and the raw CSVs are unchanged. Every "Proposed handling" below is a proposal for Day 2, decided only after the Day 2 audit measures each issue exactly.
+**Status (updated 2026-11-18):** measured exactly in the Day 2 audit (`reports/day02_audit_report.md`). Resolutions approved in `docs/cleaning_rules.md` (C1–C12); results in `reports/day03_cleaning_log.md`. Original Day 1 status, kept below for the record: issues **identified only**. No cleaning has been applied and the raw CSVs are unchanged. Every "Proposed handling" below is a proposal for Day 2, decided only after the Day 2 audit measures each issue exactly.
 
 **Severity:**
 - **High:** could distort headline metrics if ignored.
