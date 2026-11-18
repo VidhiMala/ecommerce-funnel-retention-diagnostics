@@ -1,0 +1,5 @@
+month_utc,valid_purchase_events,est_revenue_a1,dup_purchase_rows_excluded,dup_value_excluded,non_positive_rows,non_positive_value
+2019-10,245261,1210921.55,343,1172.44,20,-555.56
+2019-11,322253,1530831.06,147,677.91,17,-492.07
+2019-12,213049,1077689.23,109,475.3,18,-539.68
+2020-01,263570,1321825.06,190,869.16,37,-1158.74

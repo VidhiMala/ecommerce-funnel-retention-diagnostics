@@ -1,0 +1,5 @@
+line,purchase_rows,value
+Raw: purchase rows with price > 0 (before merging),1044922,5144461.71
+"Less: duplicate purchase copies merged (A1, reported separately)",789,3194.81
+= Estimated purchase revenue (A1),1044133,5141266.9
+"Excluded separately: non-positive price purchases (raw rows, C4)",92,-2746.05

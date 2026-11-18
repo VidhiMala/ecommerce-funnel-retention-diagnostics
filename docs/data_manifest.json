@@ -1,0 +1,29 @@
+{
+  "dataset": "mkechinov/ecommerce-events-history-in-cosmetics-shop",
+  "files": [
+    {
+      "file": "2019-Oct.csv",
+      "size_bytes": 482542278,
+      "rows": 4102283,
+      "sha256": "d87b1124a003151592e722996c6295aba2d286626c5db624c49d749877478c23"
+    },
+    {
+      "file": "2019-Nov.csv",
+      "size_bytes": 545839412,
+      "rows": 4635837,
+      "sha256": "25b03eea9020a64f97659a4cbce9d801ca81872910ce72348bfa607817539755"
+    },
+    {
+      "file": "2019-Dec.csv",
+      "size_bytes": 415302972,
+      "rows": 3533286,
+      "sha256": "ebf98f504e238109efa406d26a26a90e0d467faa938bf96b68e3fea663d2008e"
+    },
+    {
+      "file": "2020-Jan.csv",
+      "size_bytes": 501792804,
+      "rows": 4264752,
+      "sha256": "c6d8d6bdcf0b6bccb61a14447afdca08e95683f34f279befb1ac580ddc214853"
+    }
+  ]
+}

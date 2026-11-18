@@ -1,0 +1,38 @@
+validation,expected,actual,result
+raw rows = Day 1 profile total (config.EXPECTED_ROWS),16536158,16536158,PASS
+SUM(event_copies) = raw rows,16536158,16536158,PASS
+clean rows = raw rows - exact-duplicate extra rows,15667350,15667350,PASS
+view: SUM(event_copies) = raw rows,7704235,7704235,PASS
+view: clean rows = raw rows - duplicate extras,7703765,7703765,PASS
+cart: SUM(event_copies) = raw rows,4619639,4619639,PASS
+cart: clean rows = raw rows - duplicate extras,4534153,4534153,PASS
+remove_from_cart: SUM(event_copies) = raw rows,3167270,3167270,PASS
+remove_from_cart: clean rows = raw rows - duplicate extras,2385211,2385211,PASS
+purchase: SUM(event_copies) = raw rows,1045014,1045014,PASS
+purchase: clean rows = raw rows - duplicate extras,1044221,1044221,PASS
+2019-10: SUM(event_copies) = raw rows of 2019-Oct.csv,4102283,4102283,PASS
+2019-11: SUM(event_copies) = raw rows of 2019-Nov.csv,4635837,4635837,PASS
+2019-12: SUM(event_copies) = raw rows of 2019-Dec.csv,3533286,3533286,PASS
+2020-01: SUM(event_copies) = raw rows of 2020-Jan.csv,4264752,4264752,PASS
+event_month matches each row's source file month,0,0,PASS
+row fingerprint (all raw values x copies) = raw fingerprint,152517692140708538593073042,152517692140708538593073042,PASS
+prices with more than 2 decimals (raw),0,0,PASS
+revenue: SUM(price x copies) on clean = raw revenue,5144461.71,5144461.71,PASS
+revenue: A1 (merged purchases once) = raw revenue - duplicate purchase value,5141266.90,5141266.90,PASS
+non-positive purchase rows (raw count) preserved,92,92,PASS
+non-positive purchase value (raw) preserved,-2746.05,-2746.05,PASS
+is_valid_price = (price > 0),0,0,PASS
+"non-positive price rows (raw count, all events)",32997,32997,PASS
+brand_raw NULL rows (raw count) = raw brand NULLs,6931209,6931209,PASS
+brand_filled rows (raw count) = raw back-fillable NULL rows,54537,54537,PASS
+brand unchanged wherever brand_raw is present,0,0,PASS
+brand_filled rows have a brand,0,0,PASS
+has_session = false rows (raw count) = raw NULL sessions,3543,3543,PASS
+session_key NULL exactly when user_session NULL,0,0,PASS
+shared session IDs flagged = raw sessions with 2+ users,191,191,PASS
+multi-category products = raw products in 2+ category_ids,1614,1614,PASS
+primary_category_id is one of the product's category_ids,0,0,PASS
+one primary_category_id per product,0,0,PASS
+output schema (columns and types),"{'event_time': 'TIMESTAMP', 'event_type': 'VARCHAR', 'product_id': 'BIGINT', 'category_id': 'BIGINT', 'primary_category_id': 'BIGINT', 'multi_category_product': 'BOOLEAN', 'category_code': 'VARCHAR', 'brand_raw': 'VARCHAR', 'brand': 'VARCHAR', 'brand_filled': 'BOOLEAN', 'price': 'DOUBLE', 'is_valid_price': 'BOOLEAN', 'user_id': 'BIGINT', 'user_session': 'VARCHAR', 'session_key': 'VARCHAR', 'has_session': 'BOOLEAN', 'session_id_shared': 'BOOLEAN', 'session_over_24h': 'BOOLEAN', 'event_copies': 'INTEGER', 'is_duplicate_merged': 'BOOLEAN', 'source_file': 'VARCHAR', 'event_month': 'VARCHAR'}","{'event_time': 'TIMESTAMP', 'event_type': 'VARCHAR', 'product_id': 'BIGINT', 'category_id': 'BIGINT', 'primary_category_id': 'BIGINT', 'multi_category_product': 'BOOLEAN', 'category_code': 'VARCHAR', 'brand_raw': 'VARCHAR', 'brand': 'VARCHAR', 'brand_filled': 'BOOLEAN', 'price': 'DOUBLE', 'is_valid_price': 'BOOLEAN', 'user_id': 'BIGINT', 'user_session': 'VARCHAR', 'session_key': 'VARCHAR', 'has_session': 'BOOLEAN', 'session_id_shared': 'BOOLEAN', 'session_over_24h': 'BOOLEAN', 'event_copies': 'INTEGER', 'is_duplicate_merged': 'BOOLEAN', 'source_file': 'VARCHAR', 'event_month': 'VARCHAR'}",PASS
+NULLs in required columns,0,0,PASS
+event_copies >= 1 and is_duplicate_merged = (event_copies > 1),0,0,PASS

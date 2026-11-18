@@ -1,0 +1,4 @@
+step,sessions
+Raw: distinct user_session with >= 1 purchase (audit definition),126503
+"Keyed by user_id + user_session, >= 1 purchase (C7 split)",126503
+"A2: keyed, >= 1 VALID purchase (price > 0)",126503

@@ -1,0 +1,9 @@
+flag,raw_rows,dedup_rows
+C4 is_valid_price = false,32997,32604
+C6 has_session = false,3543,3179
+C7 session_id_shared,1389,1373
+C7 session_over_24h,568536,522870
+C8 brand_filled,54537,52648
+C8 brand still NULL,6876672,6505430
+C9 multi_category_product,606267,574815
+C9 category_id <> primary_category_id,257397,244094
