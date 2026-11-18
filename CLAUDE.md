@@ -78,7 +78,10 @@ Every day ends with commit + push and an update to Status below.
 - [x] Day 1: environment set up, data downloaded (4 files, 16,536,158 rows), raw profile pushed (`reports/day01_raw_profile.txt`)
 - [x] Day 1: `docs/data_dictionary.md` and `docs/data_quality_notes.md` written; every figure traced to the report
 - [x] Day 1 close-out: user reviewed both docs and approved the three metric definitions. **Day 1 approved 2026-11-16.**
-- [ ] Day 2 (Nov 17), step by step: (1) audit script → user runs → Claude verifies the results; (2) proposed cleaning rules → **user approval**; (3) cleaning to Parquet → verify; (4) cleaning log  ← **NEXT**
+- [x] Day 2 step 1a: `src/config.py`, `src/audit_raw.py` (read-only audit, 11 checks) and `tests/test_audit_raw.py` (14 tests on a synthetic fixture) written. Full-scale synthetic run (16.5M rows): ~60s, peak memory ~4.3 GB at the 4 GB DuckDB limit; output deterministic across runs.
+- [ ] Day 2 step 1b: user runs `python -m src.audit_raw` locally and pushes `reports/day02_audit_report.md` + `reports/day02_audit/`; Claude verifies  ← **NEXT**
+- [ ] Day 2 step 2: proposed cleaning rules (backed by audit numbers) → **user approval**
+- [ ] Day 2 step 3: cleaning to Parquet → verify against the audit; step 4: cleaning log
 
 ## Conversation log (key points, newest last)
 - **2026-11-15:**
@@ -100,4 +103,9 @@ Every day ends with commit + push and an update to Status below.
   - Key findings: `category_code` 98.25–98.37% null (use `category_id`); `brand` 40.45–42.84% null; min price −79.37 every month; `user_session` 0.02–0.03% null; cart events = 54–66% of views (use "ever reached" funnels, not event ratios); no `order_id` or `quantity` column; timestamps are UTC; Dec volume lower (cause to check); `remove_from_cart` exists, so upgrade 1A is feasible.
   - Proposed defaults (not yet applied): keep UTC; order = a session with ≥1 purchase; revenue = sum of price over valid purchases; exclude price ≤ 0 from revenue.
   - User reviewed and approved the data dictionary and quality notes. Approved metric definitions: UTC; order = purchasing session (proxy, not verified); revenue = positive purchase prices, 1 unit per row, non-positive prices kept and flagged and reported separately. Day 1 closed.
+- **2026-11-18 (Day 2, started one day late; Day 2 was scheduled for Nov 17):**
+  - `requirements-lock.txt` converted from UTF-16 (PowerShell `>`) to UTF-8; same contents. The user's versions include duckdb 2.0.0 and pandas 3.1.1.
+  - The audit stages the CSVs into `data/interim/raw_stage.duckdb`: a typed copy with values unchanged (not cleaning). Raw CSVs are read-only.
+  - DuckDB memory limit lowered from 6 GB to 4 GB to leave room on the 16 GB laptop.
+  - Reports never print absolute paths, which keeps local user names out of the public repo.
 
