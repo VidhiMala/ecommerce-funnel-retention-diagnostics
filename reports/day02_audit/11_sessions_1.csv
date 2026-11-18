@@ -1,0 +1,2 @@
+sessions,sessions_with_2plus_users,sessions_spanning_2plus_months,sessions_longer_than_24h,events_p50,events_p99,events_max,duration_s_p50,duration_s_p95,duration_s_p99,duration_s_max
+3614725,191,4762,22791,1,57,4387,0,2472,40206,10620821

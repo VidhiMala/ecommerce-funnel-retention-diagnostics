@@ -1,0 +1,10 @@
+column,2019-Oct.csv,2019-Nov.csv,2019-Dec.csv,2020-Jan.csv,total_nulls,null_pct
+event_time,0,0,0,0,0,0.0
+event_type,0,0,0,0,0,0.0
+product_id,0,0,0,0,0,0.0
+category_id,0,0,0,0,0,0.0
+category_code,4034806,4560089,3474821,4190033,16259749,98.3285
+brand,1659261,1986029,1510289,1775630,6931209,41.9155
+price,0,0,0,0,0,0.0
+user_id,0,0,0,0,0,0.0
+user_session,637,813,779,1314,3543,0.0214

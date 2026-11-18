@@ -1,0 +1,6 @@
+product_id,rows,negative_rows,non_negative_rows,min_price,max_price,distinct_prices,event_types,brand_first_alpha,category_ids
+5670257,28,28,0,-15.87,-15.87,1,purchase,,1
+5716857,26,26,0,-23.81,-23.81,1,"purchase, view",,1
+5716859,22,22,0,-47.62,-47.62,1,"purchase, remove_from_cart",,1
+5716855,9,9,0,-7.94,-7.94,1,purchase,,1
+5716861,9,9,0,-79.37,-79.37,1,"purchase, view",,1

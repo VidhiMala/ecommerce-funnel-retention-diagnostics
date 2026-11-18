@@ -1,0 +1,5 @@
+month_utc,days_with_events,days_in_month,min_daily,median_daily,max_daily,days_below_half_median
+2019-10,31,31,104300,130030,201068,0
+2019-11,30,30,112832,140156,270074,0
+2019-12,31,31,31096,120309,156687,1
+2020-01,31,31,80940,137205,206611,0

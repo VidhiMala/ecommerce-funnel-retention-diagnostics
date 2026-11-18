@@ -1,0 +1,5 @@
+event_type,key_groups_with_differing_attributes,rows_in_those_groups
+cart,0,
+purchase,0,
+remove_from_cart,0,
+view,0,

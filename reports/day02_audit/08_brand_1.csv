@@ -1,0 +1,5 @@
+event_type,rows,brand_null,brand_null_pct,positive_price_sum_brand_null
+view,7704235,3165651,41.09,32450214.36
+cart,4619639,1961965,42.47,9494187.24
+remove_from_cart,3167270,1361549,42.99,6716172.05
+purchase,1045014,442044,42.3,2067326.61

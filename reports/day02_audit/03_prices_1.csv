@@ -1,0 +1,5 @@
+event_type,rows,price_negative_rows,price_negative_sum,price_zero_rows,price_positive_rows,price_positive_sum
+view,7704235,2,-103.18,25256,7678977,95334811.08
+cart,4619639,0,,5947,4613692,24088723.06
+remove_from_cart,3167270,1,-47.62,1699,3165570,16603580.4
+purchase,1045014,91,-2746.05,1,1044922,5144461.71

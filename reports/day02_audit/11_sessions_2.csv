@@ -1,0 +1,4 @@
+event_type,rows_with_null_session,users_affected
+cart,2882,1090
+remove_from_cart,636,204
+view,25,25

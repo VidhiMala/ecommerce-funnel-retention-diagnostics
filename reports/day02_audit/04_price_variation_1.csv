@@ -1,0 +1,5 @@
+price_points,products,views,purchases,median_max_to_min_ratio
+1 price,16573,784296.0,68261.0,1.0
+2 prices,21463,3793418.0,519433.0,1.113
+3-5 prices,12594,3098302.0,457057.0,1.173
+6+ prices,29,2961.0,171.0,1.499

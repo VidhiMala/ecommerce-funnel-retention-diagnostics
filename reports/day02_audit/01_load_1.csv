@@ -1,0 +1,6 @@
+source_file,rows_loaded,rows_in_day1_profile,rows_match,event_time_null,event_time_bad_format,outside_file_month,first_event_utc,last_event_utc
+2019-Oct.csv,4102283,4102283,True,0,0,0,2019-10-01 00:00:00,2019-10-31 23:59:54
+2019-Nov.csv,4635837,4635837,True,0,0,0,2019-11-01 00:00:02,2019-11-30 23:59:58
+2019-Dec.csv,3533286,3533286,True,0,0,0,2019-12-01 00:00:00,2019-12-31 23:59:57
+2020-Jan.csv,4264752,4264752,True,0,0,0,2020-01-01 00:00:00,2020-01-31 23:59:58
+TOTAL,16536158,16536158,True,0,0,0,2019-10-01 00:00:00,2020-01-31 23:59:58

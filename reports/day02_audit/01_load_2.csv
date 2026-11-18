@@ -1,0 +1,5 @@
+event_type,rows,expected_label
+view,7704235,True
+cart,4619639,True
+remove_from_cart,3167270,True
+purchase,1045014,True

@@ -1,0 +1,5 @@
+source_file,purchase_rows,valid_rows,est_revenue_raw,non_positive_rows,non_positive_value
+2019-Oct.csv,245624,245604,1212093.99,20,-555.56
+2019-Nov.csv,322417,322400,1531508.97,17,-492.07
+2019-Dec.csv,213176,213158,1078164.53,18,-539.68
+2020-Jan.csv,263797,263760,1322694.22,37,-1158.74
