@@ -50,3 +50,4 @@
   - non-positive prices
 - `brand` = `brand_raw` wherever `brand_raw` is present.
 - The output schema is as expected, with no nulls in required columns.
+- Purchasing sessions by month of first valid purchase add up to the A2 total. Added 2026-11-24 after a Day 4 reconciliation check found that rows without a session could form a NULL "session" in the monthly table. That couldn't happen in the real data (no purchase lacks a session), but the query is fixed and tested.

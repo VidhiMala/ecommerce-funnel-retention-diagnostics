@@ -319,6 +319,12 @@ def validate(con, clean: str) -> list[Check]:
     add("one primary_category_id per product", 0, _one(con, f"""
         SELECT COUNT(*) FROM (SELECT product_id FROM {clean} GROUP BY 1 HAVING COUNT(DISTINCT primary_category_id) > 1)"""))
 
+    # A2 purchasing sessions: monthly attribution must add up to the total
+    add("A2: purchasing sessions by month of first valid purchase sum to the total", _one(con, f"""
+        SELECT COUNT(DISTINCT session_key) FROM {clean} WHERE event_type = 'purchase' AND is_valid_price"""),
+        _to_int(_one(con, f"""SELECT COUNT(*) FROM (SELECT session_key FROM {clean}
+            WHERE event_type = 'purchase' AND is_valid_price AND has_session GROUP BY session_key)""")))
+
     # Schema + required non-null columns
     schema = {r[0]: r[1] for r in con.execute(f"DESCRIBE SELECT * FROM {clean}").fetchall()}
     add("output schema (columns and types)", CLEAN_SCHEMA, schema)
@@ -403,7 +409,8 @@ def results(con, clean: str) -> list[tuple[str, pd.DataFrame, str]]:
 
     out.append(("a2_by_month", con.execute(f"""
         WITH s AS (SELECT session_key, MIN(event_time) AS first_valid_purchase
-                   FROM {clean} WHERE event_type = 'purchase' AND is_valid_price GROUP BY 1)
+                   FROM {clean} WHERE event_type = 'purchase' AND is_valid_price AND has_session
+                   GROUP BY 1)   -- has_session: rows without a session must not form a NULL "session"
         SELECT strftime(first_valid_purchase, '%Y-%m') AS month_utc, COUNT(*) AS purchasing_sessions
         FROM s GROUP BY 1 ORDER BY 1
     """).df(), "A2 purchasing sessions by month of the session's first valid purchase (UTC)"))

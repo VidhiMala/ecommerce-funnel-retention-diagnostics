@@ -62,7 +62,7 @@ def _fmt(v, col: str = "") -> str:
     """
     if col.endswith("_id") and v is not None and not (isinstance(v, float) and pd.isna(v)):
         return str(v)
-    if v is None or (isinstance(v, float) and pd.isna(v)):
+    if v is None or v is pd.NA or v is pd.NaT or (isinstance(v, float) and pd.isna(v)):
         return ""
     if isinstance(v, bool):
         return str(v)

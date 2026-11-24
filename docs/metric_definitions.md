@@ -44,19 +44,32 @@ Number of distinct `session_key` values (`user_id` + `user_session`) containing 
 
 ---
 
-## 3. Proposed definitions 🟡 (confirm on the day they are first used)
+## 3. Business performance metrics ✅ (approved 2026-11-24, decisions D1–D4)
 
-| Metric | Proposed definition | First used |
+| Metric | Definition | SQL |
 |---|---|---|
-| Visitors | Distinct `user_id` with ≥ 1 event in the period | Day 4 |
-| Buyers | Distinct `user_id` with ≥ 1 valid purchase | Day 4 |
-| Average order value (proxy) | Estimated purchase revenue ÷ purchasing sessions | Day 4 |
-| Revenue per visitor | Estimated purchase revenue ÷ visitors | Day 4 |
-| Session conversion rate | Purchasing sessions ÷ sessions with `has_session` | Day 5 |
-| Session stage flags | `reached_view`, `reached_cart`, `reached_purchase` (valid): whether the session contains ≥ 1 event of that stage. Each flag is independent: a purchase without a cart in the session is not counted as a cart. The share of such sessions is reported (audit: 18.6% of purchasing sessions have no cart). | Day 5 |
-| User conversion rate | Buyers ÷ visitors, over a stated period | Day 5 |
+| Visitors | Distinct `user_id` with ≥ 1 event in the period | `01`, `02` |
+| Buyers | Distinct `user_id` with ≥ 1 valid purchase in the period | `01`, `02` |
+| Average order value (proxy) | Estimated purchase revenue ÷ purchasing sessions. Always labelled a proxy. | `01`, `02` |
+| Revenue per visitor | Estimated purchase revenue ÷ visitors | `01`, `02` |
+| Session conversion | Purchasing sessions ÷ sessions (sessions with a `session_key`). **D1:** period total on Day 4; monthly trend on Day 5. | `01` |
+| User conversion | Buyers ÷ visitors, over a stated period. **D1:** as above. | `01` |
+| Activity counts (D2) | Deduplicated events `COUNT(*)` by default; raw events `SUM(event_copies)` shown alongside | `01`, `02` |
+| Rankings (D3) | Top 10 categories (`category_id`) and brands (`brand`) by estimated revenue; the rest grouped as "other"; missing brand is a separate, never-ranked "unknown" row. Ties go to the lower ID / alphabetical brand. | `04` |
+| Observed periods (D4) | 2019-11-21 to 2019-11-28 "observed peak" and 2019-12-26 to 2020-01-01 "observed trough" (dates from the Day 2 audit) are labels only. **No cause is claimed.** | `02` |
 
----
+**Time attribution** (as used in SQL `02` and `03`):
+- Events, revenue, visitors and buyers belong to the period in which the event happened (approved C7).
+- Purchasing sessions belong to the period of the session's first valid purchase (approved A2).
+- 🟡 **Sessions belong to the period of the session's first event.** This follows the A2 rule so that monthly sessions add up exactly to the total. **Proposed 2026-11-24; to be confirmed by the project owner.**
+- Visitors and buyers are distinct counts: they **do not add up** across periods.
+
+**Day 5 (proposed, not yet approved):**
+
+| Metric | Proposed definition |
+|---|---|
+| Session stage flags | `reached_view`, `reached_cart`, `reached_purchase` (valid): whether the session contains ≥ 1 event of that stage. Each flag is independent: a purchase without a cart in the session is not counted as a cart. The share of such sessions is reported (audit: 18.6% of purchasing sessions have no cart). |
+| Monthly conversion trends | Session and user conversion by month (D1) |
 
 ## 4. Cart abandonment window ⏳ (decision pending: options for review)
 
@@ -88,4 +101,5 @@ So "cart without purchase in the same session" will overstate abandonment by an 
 | Date | Change |
 |---|---|
 | 2026-11-16 | Approved: UTC; order proxy; estimated revenue |
+| 2026-11-24 | Day 4 metrics approved (D1–D4). Session month attribution proposed (first event). |
 | 2026-11-18 | A1 (merged purchases counted once) and A2 (purchasing sessions, keyed, valid purchases only) approved. Cleaning conventions C1–C12 approved. Abandonment window left pending with options W1–W4. |

@@ -189,3 +189,19 @@ def test_unparsable_timestamp_stops(tmp_path, monkeypatch):
 def test_safe_rmtree_refuses_outside_root(tmp_path):
     with pytest.raises(RuntimeError):
         clean_mod._safe_rmtree(tmp_path / "elsewhere", tmp_path / "processed")
+
+
+def test_purchase_without_session_not_counted_as_a_session(tmp_path, monkeypatch):
+    """Regression (found on Day 4): a valid purchase with no user_session must not form a NULL
+    'purchasing session' in the monthly A2 table, so monthly figures add up to the A2 total."""
+    fx = {k: list(v) for k, v in FIXTURE.items()}
+    fx["2019-Oct.csv"].append("2019-10-08 10:00:00 UTC,purchase,800,70,,h,4.00,9,")
+    monkeypatch.setattr(config, "EXPECTED_ROWS", {f: len(r) for f, r in fx.items()})
+    _write_fixture(tmp_path / "raw", fx)
+    assert clean_mod.run_clean(tmp_path / "raw", tmp_path / "s.duckdb", tmp_path / "out",
+                               tmp_path / "log.md", tmp_path / "csv") is True
+    import pandas as pd
+    by_month = pd.read_csv(tmp_path / "csv" / "06_a2_by_month.csv").purchasing_sessions.sum()
+    total = pd.read_csv(tmp_path / "csv" / "05_a2_purchasing_sessions.csv").sessions.iloc[-1]
+    assert by_month == total == 6
+

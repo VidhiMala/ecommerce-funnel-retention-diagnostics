@@ -1,11 +1,11 @@
 """
 pipeline.py - one command to rebuild every output from the raw CSVs, in order.
 
-    python -m src.pipeline                     # verify -> audit -> clean
+    python -m src.pipeline                     # verify -> audit -> clean -> kpis
     python -m src.pipeline --steps clean       # run selected steps only
 
 Steps stop the pipeline on the first failure. Later days add steps here
-(kpis, funnel, cohorts, rfm, model, exports) so the whole project stays
+(funnel, cohorts, rfm, model, exports) so the whole project stays
 reproducible with one command.
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ import sys
 import time
 from typing import Callable
 
-from src import audit_raw, clean, manifest
+from src import audit_raw, clean, kpis, manifest
 
 
 def step_verify() -> bool:
@@ -36,7 +36,16 @@ def step_clean() -> bool:
     return True
 
 
-STEPS: dict[str, Callable[[], bool]] = {"verify": step_verify, "audit": step_audit, "clean": step_clean}
+def step_kpis() -> bool:
+    try:
+        kpis.main([])
+    except SystemExit as e:  # kpis.main exits non-zero on validation failure
+        return e.code in (None, 0)
+    return True
+
+
+STEPS: dict[str, Callable[[], bool]] = {"verify": step_verify, "audit": step_audit, "clean": step_clean,
+                                        "kpis": step_kpis}
 
 
 def run(steps: list[str]) -> int:
