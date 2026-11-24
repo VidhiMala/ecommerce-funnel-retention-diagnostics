@@ -1,0 +1,2 @@
+period_start_utc,period_end_utc,visitors,buyers,sessions,purchasing_sessions,est_revenue,valid_purchase_events,events_dedup,events_raw,dup_purchase_copies_all,dup_purchase_copies_excluded,dup_purchase_value_excluded,nonpositive_purchase_rows,nonpositive_purchase_value,aov_proxy,revenue_per_visitor,session_conversion_pct,user_conversion_pct
+2019-10-01,2020-01-31 23:59:58,1341499,92652,3614959,126503,5141266.9,1044133,15667350,16536158,793,789,3194.81,92,-2746.05,40.64,3.8325,3.4994,6.9066

@@ -1,0 +1,5 @@
+event_type,events_dedup,events_raw,share_of_dedup_pct
+view,7703765,7704235,49.1708
+cart,4534153,4619639,28.9401
+remove_from_cart,2385211,3167270,15.2241
+purchase,1044221,1045014,6.6649

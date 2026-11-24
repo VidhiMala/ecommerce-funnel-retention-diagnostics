@@ -1,0 +1,48 @@
+validation,expected,actual,result
+overview revenue = direct SUM over valid purchases,5141266.90,5141266.90,PASS
+overview events_raw = SUM(event_copies); events_dedup = COUNT(*),16536158/15667350,16536158/15667350,PASS
+revenue: sum over months = total,5141266.90,5141266.90,PASS
+valid purchase events: sum over months = total,1044133,1044133,PASS
+revenue: sum over days = total,5141266.90,5141266.90,PASS
+valid purchase events: sum over days = total,1044133,1044133,PASS
+revenue: sum over weekday x hour cells = total,5141266.90,5141266.90,PASS
+valid purchase events: sum over weekday x hour cells = total,1044133,1044133,PASS
+revenue: sum over weekdays = total,5141266.90,5141266.90,PASS
+revenue: sum over hours = total,5141266.90,5141266.90,PASS
+revenue: sum over category rows = total,5141266.90,5141266.90,PASS
+valid purchase events: sum over category rows = total,1044133,1044133,PASS
+revenue: sum over brand rows incl. unknown = total,5141266.90,5141266.90,PASS
+valid purchase events: sum over brand rows incl. unknown = total,1044133,1044133,PASS
+purchasing sessions: sum over months = total,126503,126503,PASS
+purchasing sessions: sum over days = total,126503,126503,PASS
+purchasing sessions: sum over weekday x hour cells = total,126503,126503,PASS
+sessions: sum over months = total,3614959,3614959,PASS
+sessions: sum over days = total,3614959,3614959,PASS
+sessions: sum over weekday x hour = total,3614959,3614959,PASS
+events_dedup: sum over months = total,15667350,15667350,PASS
+events_dedup: sum over days = total,15667350,15667350,PASS
+events_raw: sum over months = total,16536158,16536158,PASS
+events_raw: sum over days = total,16536158,16536158,PASS
+event_counts table sums to totals (dedup/raw),15667350/16536158,15667350/16536158,PASS
+visitors: max(month) <= total <= sum(months),True,True,PASS
+buyers: max(month) <= total <= sum(months),True,True,PASS
+aov_proxy = revenue / purchasing sessions,True,True,PASS
+"conversion rates within [0, 100]",True,True,PASS
+buyers <= visitors and purchasing sessions <= sessions,True,True,PASS
+weekday x hour grid has 168 cells,168,168,PASS
+category table: <= 10 ranked rows + 'other',True,True,PASS
+brand table: <= 10 ranked rows + 'other' + 'unknown' (unknown never ranked),True,True,PASS
+brand 'unknown' revenue = revenue with no brand,2056876.69,2056876.69,PASS
+dup copies: all = valid-price + non-positive (direct count),793,793,PASS
+dup copies: valid-price copies <= all copies,True,True,PASS
+known-brand share: NULL only on the 'unknown' row,0,0,PASS
+known-brand share = row revenue / known-brand revenue (4 dp),0,0,PASS
+distinct_products_purchased: no row exceeds all distinct purchased products,True,True,PASS
+every time column is labelled _utc (or is a weekday number / observed_period label),[],[],PASS
+Day 3: revenue (A1) = cleaning log,5141266.90,5141266.90,PASS
+Day 3: monthly revenue = cleaning log (all months),0,0,PASS
+Day 3: purchasing sessions (A2) = cleaning log,126503,126503,PASS
+Day 3: monthly purchasing sessions = cleaning log,0,0,PASS
+Day 3: dup purchase copies (all) = cleaning log merged extras for purchase,793,793,PASS
+Day 3: dup purchase copies (valid-price) and value = cleaning log,789/3194.81,789/3194.81,PASS
+Day 3: event counts by type (raw and dedup) = cleaning log,0,0,PASS
