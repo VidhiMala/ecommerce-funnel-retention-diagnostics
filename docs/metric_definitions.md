@@ -61,15 +61,22 @@ Number of distinct `session_key` values (`user_id` + `user_session`) containing 
 **Time attribution** (as used in SQL `02` and `03`):
 - Events, revenue, visitors and buyers belong to the period in which the event happened (approved C7).
 - Purchasing sessions belong to the period of the session's first valid purchase (approved A2).
-- 🟡 **Sessions belong to the period of the session's first event.** This follows the A2 rule so that monthly sessions add up exactly to the total. **Proposed 2026-11-24; to be confirmed by the project owner.**
+- ✅ **Sessions belong to the period of the session's first event.** This follows the A2 rule so that monthly sessions add up exactly to the total. Approved 2026-11-24.
 - Visitors and buyers are distinct counts: they **do not add up** across periods.
 
-**Day 5 (proposed, not yet approved):**
+**Day 5 funnel decisions ✅ (approved 2026-11-24, F1–F7; to be implemented after the Day 4 real-data run is verified)**
 
-| Metric | Proposed definition |
+| ID | Decision |
 |---|---|
-| Session stage flags | `reached_view`, `reached_cart`, `reached_purchase` (valid): whether the session contains ≥ 1 event of that stage. Each flag is independent: a purchase without a cart in the session is not counted as a cart. The share of such sessions is reported (audit: 18.6% of purchasing sessions have no cart). |
-| Monthly conversion trends | Session and user conversion by month (D1) |
+| F1 | **Session stage flags are independent:** `reached_view`, `reached_cart`, `reached_purchase` (valid) are set only by an event of that stage, never inferred from a later stage. Report conditional rates (cart ÷ view sessions, purchase ÷ cart sessions) **and** the share of purchasing sessions with no cart event. |
+| F2 | **User-level funnel:** per user, for the whole period and per month: viewed, carted, made a valid purchase |
+| F3 | **Segment funnels** use as denominator the **sessions that touched the segment** (any event in that category / brand / price band). Cart and purchase rates are measured against that. |
+| F4 | **Price bands:** five bands from quintiles of each product's median positive price, computed at run time, with the band edges published |
+| F5 | **Segments:** as Day 4: top 10 categories and brands by revenue, plus "other", plus "unknown" brand |
+| F6 | **Statistics:** Wilson 95% confidence interval per rate; chi-square test across segments; each segment vs the rest by two-proportion z-test with Benjamini–Hochberg false-discovery-rate correction (q = 0.05); effect sizes in percentage points |
+| F7 | **A difference is reported as meaningful only if** \|difference\| ≥ **1 percentage point** **and** it's significant after correction. Both conditions are shown. |
+| — | Stated limitation: sessions of the same user aren't independent. Overall rates are re-estimated by resampling whole users as a robustness check. |
+| — | Monthly session and user conversion (D1) are reported on Day 5. |
 
 ## 4. Cart abandonment window ⏳ (decision pending: options for review)
 
@@ -101,5 +108,5 @@ So "cart without purchase in the same session" will overstate abandonment by an 
 | Date | Change |
 |---|---|
 | 2026-11-16 | Approved: UTC; order proxy; estimated revenue |
-| 2026-11-24 | Day 4 metrics approved (D1–D4). Session month attribution proposed (first event). |
+| 2026-11-24 | Day 4 metrics approved (D1–D4). Session month attribution (first event) approved. Day 5 funnel decisions F1–F7 approved (F7: 1 pp + significant after correction). |
 | 2026-11-18 | A1 (merged purchases counted once) and A2 (purchasing sessions, keyed, valid purchases only) approved. Cleaning conventions C1–C12 approved. Abandonment window left pending with options W1–W4. |
