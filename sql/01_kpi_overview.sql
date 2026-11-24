@@ -29,7 +29,11 @@ WITH t AS (
         COUNT(*)                    FILTER (WHERE event_type = 'purchase' AND is_valid_price) AS valid_purchase_events,
         COUNT(*)                                                                    AS events_dedup,
         SUM(event_copies)                                                           AS events_raw,
-        -- reported separately (approved A1 / C4)
+        -- reported separately (approved A1 / C4). Duplicate purchase copies:
+        --   _all      = every merged duplicate purchase copy (any price)          (R3)
+        --   _excluded = valid-price copies only: the ones A1 revenue leaves out;
+        --               the non-positive ones are inside nonpositive_purchase_rows
+        COALESCE(SUM(event_copies - 1) FILTER (WHERE event_type = 'purchase'), 0) AS dup_purchase_copies_all,
         COALESCE(SUM(event_copies - 1)
                  FILTER (WHERE event_type = 'purchase' AND is_valid_price), 0)      AS dup_purchase_copies_excluded,
         COALESCE(SUM(CAST(price AS DECIMAL(18,2)) * (event_copies - 1))

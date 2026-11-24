@@ -7,9 +7,15 @@
 --   Brands:     `brand` after the approved single-brand fill (C8); missing brand
 --               is its own 'unknown' row and is never ranked.
 -- Ties broken by the lower id / alphabetical brand, so ranking is deterministic.
--- purchasing_sessions, buyers and products_sold are distinct counts: NOT additive
---   across rows (a session can buy from several categories). est_revenue and
---   valid_purchase_events ARE additive and sum to the period totals.
+-- purchasing_sessions, buyers and distinct_products_purchased are distinct counts:
+--   NOT additive across rows (a session or buyer can appear in several rows; a
+--   product listed under 2+ category IDs appears in each of those category rows).
+--   est_revenue and valid_purchase_events ARE additive and sum to the period totals.
+-- distinct_products_purchased = distinct products with >= 1 valid purchase (NOT units;
+--   units at one per row = valid_purchase_events). Renamed from products_sold (R1, 2026-11-24).
+-- Brand shares (R2): revenue_share_pct            = row revenue / ALL revenue (incl. 'unknown')
+--                    share_of_known_brand_revenue_pct = row revenue / revenue with a known brand
+--                                                   (NULL for the 'unknown' row)
 -- =============================================================================
 
 -- name: category_top10
@@ -33,7 +39,7 @@ agg AS (
            COUNT(*)                                                     AS valid_purchase_events,
            COUNT(DISTINCT v.session_key)                                AS purchasing_sessions,
            COUNT(DISTINCT v.user_id)                                    AS buyers,
-           COUNT(DISTINCT v.product_id)                                 AS products_sold
+           COUNT(DISTINCT v.product_id)                                 AS distinct_products_purchased
     FROM vp v JOIN grp g USING (category_id)
     GROUP BY 1, 2
     UNION ALL   -- keep a stable 11-row shape: 'other' row even when empty
@@ -45,7 +51,7 @@ SELECT rank_order AS rank, category_group, category_code, categories_in_row,
        ROUND(100.0 * est_revenue / NULLIF(SUM(est_revenue) OVER (), 0), 4) AS revenue_share_pct,
        valid_purchase_events,
        ROUND(est_revenue / NULLIF(valid_purchase_events, 0), 4)            AS avg_price,
-       purchasing_sessions, buyers, products_sold
+       purchasing_sessions, buyers, distinct_products_purchased
 FROM agg
 ORDER BY rank_order;
 
@@ -69,7 +75,7 @@ agg AS (
            COUNT(*)                                                              AS valid_purchase_events,
            COUNT(DISTINCT session_key)                                           AS purchasing_sessions,
            COUNT(DISTINCT user_id)                                               AS buyers,
-           COUNT(DISTINCT product_id)                                            AS products_sold
+           COUNT(DISTINCT product_id)                                            AS distinct_products_purchased
     FROM labelled GROUP BY 1, 2
     UNION ALL SELECT 11, 'other', 0, 0, 0, 0, 0, 0, 0
     WHERE NOT EXISTS (SELECT 1 FROM labelled WHERE rank_order = 11)
@@ -79,10 +85,13 @@ agg AS (
 SELECT CASE WHEN rank_order <= 10 THEN rank_order END AS rank, brand_group, brands_in_row,
        est_revenue,
        ROUND(100.0 * est_revenue / NULLIF(SUM(est_revenue) OVER (), 0), 4) AS revenue_share_pct,
+       CASE WHEN brand_group <> 'unknown' THEN
+            ROUND(100.0 * est_revenue / NULLIF(SUM(est_revenue) FILTER (WHERE brand_group <> 'unknown') OVER (), 0), 4)
+       END                                                                  AS share_of_known_brand_revenue_pct,
        est_revenue_from_filled_brand,
        valid_purchase_events,
        ROUND(est_revenue / NULLIF(valid_purchase_events, 0), 4)            AS avg_price,
-       purchasing_sessions, buyers, products_sold
+       purchasing_sessions, buyers, distinct_products_purchased
 FROM agg
 ORDER BY rank_order;
 

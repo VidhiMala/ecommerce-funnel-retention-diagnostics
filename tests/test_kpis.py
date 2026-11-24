@@ -53,6 +53,7 @@ def test_overview_values(kpi):
     assert (o.aov_proxy, o.revenue_per_visitor) == (5.5, 4.125)
     assert (o.session_conversion_pct, o.user_conversion_pct) == (75.0, 62.5)
     assert (o.dup_purchase_copies_excluded, o.dup_purchase_value_excluded) == (1, 5.0)
+    assert o.dup_purchase_copies_all == 1           # fixture's only duplicate purchase has a valid price
     assert (o.nonpositive_purchase_rows, o.nonpositive_purchase_value) == (1, -3.0)
 
 
@@ -92,6 +93,47 @@ def test_category_and_brand_tables(kpi):
     assert b.set_index("brand_group").loc["a", "est_revenue_from_filled_brand"] == 6.0
     assert b.set_index("brand_group").loc["unknown", "rank"] != b.set_index("brand_group").loc["unknown", "rank"]  # NaN
     assert b.est_revenue.sum() == 33.0
+    # R2: share of known-brand revenue (known brands total 33.00 here; 'unknown' has none)
+    kb = b.set_index("brand_group").share_of_known_brand_revenue_pct
+    assert kb["a"] == round(100 * 16 / 33, 4) and pd.isna(kb["unknown"])
+    # R1: distinct products bought at least once, not units; non-additive across category rows
+    assert list(c.distinct_products_purchased) == [1, 1, 1, 1, 0]
+    assert "products_sold" not in c.columns and "products_sold" not in b.columns
+
+
+def test_known_brand_share_excludes_unknown(tmp_path, monkeypatch):
+    """R2 with real 'unknown' revenue: the known-brand share divides by known-brand revenue only."""
+    fx = {k: list(v) for k, v in FIXTURE.items()}
+    fx["2019-Oct.csv"].append("2019-10-09 10:00:00 UTC,purchase,900,80,,,10.00,10,"
+                              "cccccccc-0000-0000-0000-000000000000")       # 10.00 with no brand
+    _clean_and_kpis(tmp_path, monkeypatch, fx)
+    b = pd.read_csv(tmp_path / "kcsv" / "brand_top10.csv").set_index("brand_group")
+    assert b.loc["unknown", "est_revenue"] == 10.0
+    assert b.loc["a", "revenue_share_pct"] == round(100 * 16 / 43, 4)          # of all revenue
+    assert b.loc["a", "share_of_known_brand_revenue_pct"] == round(100 * 16 / 33, 4)  # of known-brand revenue
+    assert pd.isna(b.loc["unknown", "share_of_known_brand_revenue_pct"])
+
+
+def test_dup_copies_all_vs_valid(tmp_path, monkeypatch):
+    """R3: a duplicated NON-POSITIVE purchase counts in dup_purchase_copies_all but not in the
+    valid-price column; revenue and purchasing sessions are unchanged by it."""
+    fx = {k: list(v) for k, v in FIXTURE.items()}
+    row = "2019-10-02 11:00:20 UTC,purchase,200,20,acc.bag,,-3.00,2,bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    assert row in fx["2019-Oct.csv"]
+    fx["2019-Oct.csv"].append(row)                                            # duplicate of the -3.00 purchase
+    _clean_and_kpis(tmp_path, monkeypatch, fx)
+    o = pd.read_csv(tmp_path / "kcsv" / "kpi_overview.csv").iloc[0]
+    assert (o.dup_purchase_copies_all, o.dup_purchase_copies_excluded) == (2, 1)
+    assert (o.est_revenue, o.purchasing_sessions, o.nonpositive_purchase_rows) == (33.0, 6, 2)
+
+
+def _clean_and_kpis(tmp_path, monkeypatch, fx):
+    monkeypatch.setattr(config, "EXPECTED_ROWS", {f: len(r) for f, r in fx.items()})
+    _write_fixture(tmp_path / "raw", fx)
+    assert clean_mod.run_clean(tmp_path / "raw", tmp_path / "s.duckdb", tmp_path / "out",
+                               tmp_path / "clog.md", tmp_path / "ccsv")
+    assert kpis.run_kpis(tmp_path / "out" / clean_mod.OUTPUT_NAME, tmp_path / "k.md", tmp_path / "kcsv",
+                         day3_dir=None)
 
 
 def test_failure_keeps_previous_outputs(kpi, monkeypatch):
@@ -119,3 +161,6 @@ def test_real_data_kpis_reconcile_with_day3(tmp_path):
     o = pd.read_csv(tmp_path / "csv" / "kpi_overview.csv").iloc[0]
     rec = pd.read_csv(DAY3 / "03_revenue_reconciliation.csv")
     assert Decimal(str(o.est_revenue)) == Decimal(str(rec.value[2]))
+    counts = pd.read_csv(DAY3 / "01_event_counts.csv")
+    all_dups = counts[(counts.month_utc == "ALL") & (counts.event_type == "purchase")].merged_extra_rows.iloc[0]
+    assert (o.dup_purchase_copies_all, o.dup_purchase_copies_excluded) == (all_dups, rec.purchase_rows[1])

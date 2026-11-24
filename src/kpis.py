@@ -149,6 +149,26 @@ def validate(con, day3_dir: Path | None) -> list[Check]:
         SELECT COALESCE(SUM(CAST(price AS DECIMAL(18,2))), 0) FROM events
         WHERE event_type='purchase' AND is_valid_price AND brand IS NULL"""),
         _one(con, "SELECT est_revenue FROM q_brand_top10 WHERE brand_group = 'unknown'"))
+    # R1-R3 columns (added 2026-11-24)
+    add("dup copies: all = valid-price + non-positive (direct count)", _one(con, """
+        SELECT COALESCE(SUM(event_copies - 1), 0) FROM events WHERE event_type = 'purchase'"""),
+        ov("dup_purchase_copies_all"))
+    add("dup copies: valid-price copies <= all copies", True,
+        ov("dup_purchase_copies_excluded <= dup_purchase_copies_all"))
+    add("known-brand share: NULL only on the 'unknown' row", 0, _one(con, """
+        SELECT COUNT(*) FROM q_brand_top10
+        WHERE (brand_group = 'unknown') <> (share_of_known_brand_revenue_pct IS NULL)"""))
+    add("known-brand share = row revenue / known-brand revenue (4 dp)", 0, _one(con, """
+        SELECT COUNT(*) FROM q_brand_top10, (SELECT SUM(est_revenue) AS k FROM q_brand_top10
+                                               WHERE brand_group <> 'unknown') t
+        WHERE brand_group <> 'unknown' AND t.k > 0
+          AND share_of_known_brand_revenue_pct <> ROUND(100.0 * est_revenue / t.k, 4)"""))
+    add("distinct_products_purchased: no row exceeds all distinct purchased products", True, _one(con, """
+        SELECT MAX(x) <= (SELECT COUNT(DISTINCT product_id) FROM events
+                          WHERE event_type = 'purchase' AND is_valid_price)
+        FROM (SELECT distinct_products_purchased AS x FROM q_category_top10
+              UNION ALL SELECT distinct_products_purchased FROM q_brand_top10)"""))
+
     time_cols = [r[0] for t in ["q_kpi_overview", "q_monthly_kpis", "q_daily_kpis", "q_weekday_hour",
                                 "q_weekday_summary", "q_hour_summary"]
                  for r in con.execute(f"DESCRIBE {t}").fetchall()
@@ -173,6 +193,13 @@ def validate(con, day3_dir: Path | None) -> list[Check]:
             SELECT COUNT(*) FROM read_csv('{d}/06_a2_by_month.csv', types={{'month_utc': 'VARCHAR'}}) d
             FULL JOIN q_monthly_kpis m USING (month_utc)
             WHERE d.purchasing_sessions IS DISTINCT FROM m.purchasing_sessions"""))
+        add("Day 3: dup purchase copies (all) = cleaning log merged extras for purchase", _one(con, f"""
+            SELECT merged_extra_rows FROM read_csv('{d}/01_event_counts.csv', types={{'month_utc': 'VARCHAR'}})
+            WHERE month_utc = 'ALL' AND event_type = 'purchase'"""), ov("dup_purchase_copies_all"))
+        add("Day 3: dup purchase copies (valid-price) and value = cleaning log", _one(con, f"""
+            SELECT purchase_rows || '/' || CAST(value AS DECIMAL(18,2))
+            FROM read_csv('{d}/03_revenue_reconciliation.csv') WHERE line LIKE 'Less: duplicate%'"""),
+            ov("dup_purchase_copies_excluded || '/' || dup_purchase_value_excluded"))
         add("Day 3: event counts by type (raw and dedup) = cleaning log", 0, _one(con, f"""
             SELECT COUNT(*) FROM (SELECT * FROM read_csv('{d}/01_event_counts.csv', types={{'month_utc': 'VARCHAR'}})
                                   WHERE month_utc = 'ALL') d
@@ -197,15 +224,31 @@ REPORT_SECTIONS = [
 ]
 
 NOTES = """
-## Notes on reading these tables
-- **Estimated revenue** follows the approved definition A1: positive prices on purchase events, one unit per row, merged duplicate purchases counted once. Non-positive and duplicate purchase values are reported separately in the overview. Currency is that of the source data.
+## How to read these tables
+
+**Definitions** (full column dictionary: `docs/metric_definitions.md` §3a)
+- **Estimated revenue** follows A1: positive prices on purchase events, one unit per row, merged duplicate purchases counted once. Currency is that of the source data.
 - **Purchasing sessions** (A2) approximate orders. They are **not an exact order count**: the data has no order ID. **AOV (proxy)** = estimated revenue ÷ purchasing sessions.
-- **Visitors and buyers are distinct counts**: monthly values do not add up to the period total, because people return across months.
-- **Attribution:** revenue and events count in the period they happened. Sessions count in the period of their first event; purchasing sessions in the period of their first valid purchase. These three add up exactly to the totals.
+- **Duplicate purchase copies:** `dup_purchase_copies_all` counts every merged duplicate purchase copy, at any price. `dup_purchase_copies_excluded` counts only the valid-price copies that A1 revenue leaves out; their value is `dup_purchase_value_excluded`. The difference is copies with price ≤ 0, which are already counted in `nonpositive_purchase_rows`.
+
+**Additive vs non-additive columns**
+- **Additive** (rows add up to the total): `est_revenue`, `valid_purchase_events`, event counts, and monthly / daily / weekday × hour `sessions` and `purchasing_sessions`.
+- **Not additive**, because they are distinct counts: `visitors`, `buyers`, and in the category / brand tables `purchasing_sessions`, `buyers` and `distinct_products_purchased`. A person, session or product can appear in several rows. In particular, a product listed under 2+ category IDs appears in each of those rows. **Never sum these columns** (in Excel or Power BI, use the period totals instead).
+- `distinct_products_purchased` is the number of distinct products bought at least once, **not units**. Units, at one per row, are `valid_purchase_events`.
+- `avg_price` = estimated revenue ÷ valid purchase events: the average price per unit bought, **not** an order value.
+
+**Brand shares**
+- `revenue_share_pct` = row revenue ÷ **all** revenue, including the "unknown" brand row.
+- `share_of_known_brand_revenue_pct` = row revenue ÷ revenue **with a known brand**; empty for "unknown". Use it to compare brands; use `revenue_share_pct` to size a brand against the whole business.
+- `est_revenue_from_filled_brand` is the part of a brand's revenue whose brand was filled by rule C8 (missing in the raw data, filled from the product's single known brand).
+
+**Time attribution and limitations**
+- Revenue and events count in the period they happened. Sessions count in the period of their first event; purchasing sessions in the period of their first valid purchase.
+- **Monthly AOV is approximate:** it divides revenue by event month by purchasing sessions by first-purchase month. Sessions with valid purchases in two months (670 in the Day 3 real data) put second-month revenue over a session counted in the earlier month. The period-level AOV is exact.
 - **All times are UTC.** The store's local time zone is unknown, so local shopping hours shouldn't be read from the hour table.
 - **Observed patterns:** `observed_period` in `daily_kpis.csv` marks the 2019-11-21 to 2019-11-28 peak and the 2019-12-26 to 2020-01-01 trough. These are **observed only; no cause is assumed** (decision D4).
-- Conversion rates are given for the whole period only. Monthly conversion trends come on Day 5 (decision D1).
-- Categories are numeric IDs. A readable `category_code` exists for only a few of them.
+- Conversion rates are given for the whole period only; monthly trends come on Day 5 (decision D1).
+- Categories are numeric store-taxonomy IDs; a readable `category_code` exists for only a few, and some of those are non-cosmetic. "Other" rows contain only categories / brands with revenue. Revenue rankings show volume, not conversion performance (Day 5).
 """
 
 

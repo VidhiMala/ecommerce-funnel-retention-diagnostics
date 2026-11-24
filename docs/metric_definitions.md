@@ -19,6 +19,7 @@ All timestamps stay in UTC (the raw data carries a `UTC` suffix). Every time-bas
 Sum of `price` over `purchase` events where `price > 0`, assuming one unit per purchase row (no `quantity` column).
 - Rows with `price ≤ 0` are excluded from this metric but **kept and flagged** (`is_valid_price = false`). The excluded record count and their summed value are always reported separately.
 - Merged duplicate purchase events (C1) are counted **once**. The duplicate purchase rows and their value are reported separately. `event_copies` is kept for traceability.
+- **Duplicate purchase copies (real data, Day 3): 793 in total.** 789 have a valid price and are worth 3,194.81; A1 revenue leaves them out, and they're reported as `dup_purchase_copies_excluded` / `dup_purchase_value_excluded`. The other **4** have a price ≤ 0; they're already inside the 92 non-positive purchase rows (`nonpositive_purchase_rows`). The overview shows the total as `dup_purchase_copies_all` (approved R3, 2026-11-24).
 - SQL: `SUM(price) FILTER (WHERE event_type = 'purchase' AND is_valid_price)` on the clean table.
 - Currency: as in the source data. No FX conversion.
 
@@ -64,6 +65,41 @@ Number of distinct `session_key` values (`user_id` + `user_session`) containing 
 - ✅ **Sessions belong to the period of the session's first event.** This follows the A2 rule so that monthly sessions add up exactly to the total. Approved 2026-11-24.
 - Visitors and buyers are distinct counts: they **do not add up** across periods.
 
+## 3a. Day 4 output column dictionary (approved 2026-11-24)
+
+Output tables: `reports/day04_kpis/*.csv`, from `sql/01`–`sql/04`. **Additive** means the rows add up to the period total. Distinct counts are **not additive**: never sum them across rows (Excel / Power BI: use the period totals).
+
+| Column | Table(s) | Definition | Additive across rows? |
+|---|---|---|---|
+| `est_revenue` | all | Estimated purchase revenue (A1) for the row | ✅ |
+| `valid_purchase_events` | most | Purchase events with price > 0, merged duplicates once (= units at one per row) | ✅ |
+| `events_dedup` / `events_raw` | overview, trends, event_counts | `COUNT(*)` / `SUM(event_copies)` (D2) | ✅ |
+| `sessions` / `sessions_started` | trends, weekday × hour | Sessions counted in the period of their first event | ✅ (over time periods) |
+| `purchasing_sessions` | overview, trends, weekday × hour | A2, counted in the period of the first valid purchase | ✅ over time periods · ❌ in category/brand tables |
+| `visitors`, `buyers` | overview, trends, category/brand | Distinct users with any event / a valid purchase | ❌ |
+| `distinct_products_purchased` | category, brand | Distinct products with ≥ 1 valid purchase in the row. **Not units.** A product listed under 2+ category IDs counts in each of those category rows. *(Renamed from `products_sold`, R1.)* | ❌ |
+| `avg_price` | category, brand | `est_revenue ÷ valid_purchase_events`: the average price per unit bought, **not** an order value | — |
+| `aov_proxy` | overview, monthly | `est_revenue ÷ purchasing_sessions` (proxy; see limitation below) | — |
+| `revenue_per_visitor` | overview, monthly | `est_revenue ÷ visitors` | — |
+| `revenue_share_pct` | weekday × hour, weekday, hour, category, brand | Row revenue ÷ **all** revenue in the table (brand table: **includes** the "unknown" row) | ✅ (≈100, rounding) |
+| `share_of_known_brand_revenue_pct` | brand | Row revenue ÷ revenue **with a known brand**; empty for "unknown" *(R2)* | ✅ over known-brand rows |
+| `est_revenue_from_filled_brand` | brand | The part of `est_revenue` whose brand was filled by C8 (missing in the raw data, filled from the product's single known brand). Always 0 for "unknown". | ✅ |
+| `categories_in_row` / `brands_in_row` | category, brand | How many categories / brands the row covers (1 for ranked rows; more for "other") | ✅ |
+| `dup_purchase_copies_all` | overview | Every merged duplicate purchase copy, at any price *(R3)* | — |
+| `dup_purchase_copies_excluded`, `dup_purchase_value_excluded` | overview | Valid-price duplicate copies, and their value, left out of A1 revenue | — |
+| `nonpositive_purchase_rows`, `nonpositive_purchase_value` | overview | Raw purchase rows with price ≤ 0, and their value (C4), reported separately | — |
+| `n_days_utc` | weekday | Times each weekday occurs between the first and last event date (UTC), used for per-day averages | — |
+| `observed_period` | daily | D4 label for the observed peak / trough; **no cause claimed** | — |
+| `*_mom_pct` | monthly | Month-over-month change; empty when the previous month is 0 or absent | — |
+
+**Reading the category and brand tables:**
+- **Brand shares have two denominators.** `revenue_share_pct` sizes a brand against the whole business, including "unknown". `share_of_known_brand_revenue_pct` compares brands with each other. Missing brands carried about 40% of raw purchase revenue before the C8 fill (audit: 2,067,326.61), so the two can differ a lot, and "unknown" may be the largest single row. It is never ranked.
+- **"Other"** contains only categories / brands **with** revenue. Categories and brands without valid purchases are counted only in `brand_coverage`.
+- **Categories** are numeric store-taxonomy IDs. A readable `category_code` exists for few of them, and some of those are non-cosmetic (e.g. `appliances.environment.vacuum`).
+- **Revenue rankings** show sales volume, not conversion performance (Day 5).
+
+**Limitation: monthly AOV.** `aov_proxy` in the monthly table divides revenue by **event month** by purchasing sessions by **month of first valid purchase**. Sessions with valid purchases in two months (**670** in the Day 3 real data) put second-month revenue over a session counted in the earlier month, so monthly AOV is approximate. The **period-level** AOV has no such mismatch.
+
 **Day 5 funnel decisions ✅ (approved 2026-11-24, F1–F7; to be implemented after the Day 4 real-data run is verified)**
 
 | ID | Decision |
@@ -108,5 +144,6 @@ So "cart without purchase in the same session" will overstate abandonment by an 
 | Date | Change |
 |---|---|
 | 2026-11-16 | Approved: UTC; order proxy; estimated revenue |
+| 2026-11-24 | Day 4 audit follow-ups: column dictionary (§3a); duplicate-copies clarification; monthly AOV limitation; R1 `products_sold` → `distinct_products_purchased`; R2 `share_of_known_brand_revenue_pct`; R3 `dup_purchase_copies_all`. No change to revenue, purchasing-session or conversion calculations. |
 | 2026-11-24 | Day 4 metrics approved (D1–D4). Session month attribution (first event) approved. Day 5 funnel decisions F1–F7 approved (F7: 1 pp + significant after correction). |
 | 2026-11-18 | A1 (merged purchases counted once) and A2 (purchasing sessions, keyed, valid purchases only) approved. Cleaning conventions C1–C12 approved. Abandonment window left pending with options W1–W4. |
