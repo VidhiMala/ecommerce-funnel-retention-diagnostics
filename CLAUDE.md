@@ -30,26 +30,29 @@ Python (pandas, numpy, scipy, statsmodels, scikit-learn), DuckDB, SQL, Excel, Po
 7. **(DS)** Cart-session purchase-propensity model: logistic regression baseline vs gradient boosting, time-based split, calibration, feature importance, linked to recovery scenarios
 8. **(PA)** A/B test plan for the top recommendation: hypothesis, primary metric, guardrails, power/sample-size calculation
 
-## Timeline: 12 days, full scope, 4–5 hrs/day (Day 1 = 2026-11-16, user's choice on 2026-11-16)
+## Timeline: deadline extended to **2026-12-05**, full scope (user decision 2026-11-24, Option A)
+Originally 12 days ending Nov 27 (Day 1 = 2026-11-16). On 2026-11-24 the project was at Day 4 (≈5 days behind); the user chose to **extend the deadline and keep the full scope and quality standards: nothing removed or simplified.**
 "Deployed" means: a public GitHub repo with CI, a README with the executive summary, the dashboard (PDF + GIF, plus Publish to web if allowed), a live Streamlit app, and a reproducible pipeline.
-Every day ends with commit + push and an update to Status below.
+Every day ends with commit + push and an update to Status below. **Real data first:** every analysis day ends with the user's real-data run and Claude's verification; synthetic fixtures are only for tests.
 
-| Day | Date | Tasks |
-|---|---|---|
-| 1 | Nov 16 | GitHub repo; venv; download Oct–Jan; run profiler; data dictionary |
-| 2 | Nov 17 | Quality audit (duplicates, nulls, prices, time range, sessions); cleaning rules; clean → Parquet; cleaning log |
-| 3 | Nov 18 | `src/pipeline.py` skeleton; pytest data-quality tests; GitHub Actions CI; `docs/metric_definitions.md` |
-| 4 | Nov 19 | SQL 1–4: KPIs and trends (month/weekday/hour), top categories/brands |
-| 5 | Nov 20 | SQL 5–8: session + user funnel by category/brand/price band; Wilson CIs, chi-square, BH correction |
-| 6 | Nov 21 | SQL 9–11: cart abandonment, revenue leakage; differentiating analysis (1A or 1B) |
-| 7 | Nov 22 | SQL 12–16: cohort retention, repeat purchase, RFM segments + profiles |
-| 8 | Nov 23 | Propensity model: features, time split, logistic vs gradient boosting, calibration, importance |
-| 9 | Nov 24 | Bootstrap CIs on recovery; export tables; Excel what-if model; reconciliation check |
-| 10 | Nov 25 | Power BI 4-page dashboard |
-| 11 | Nov 26 | Insights report, executive one-pager, limitations, A/B test plan; README |
-| 12 | Nov 27 | Streamlit app + deploy; PDF + GIF; Publish to web; final review; v1.0 release |
+| Day | Date | Tasks | Status |
+|---|---|---|---|
+| 1 | Nov 16 | GitHub repo; venv; download Oct–Jan; run profiler; data dictionary | ✅ |
+| 2 | Nov 17–18 | Quality audit | ✅ |
+| 3 | Nov 18 | Cleaning rules → Parquet → cleaning log; pipeline; tests; CI; metric definitions; data manifest | ✅ |
+| 4 | Nov 24 | SQL 01–04: KPIs and trends (month/weekday/hour), top categories/brands | code ✅ · real-data run pending |
+| 5 | Nov 25 | SQL 05–08: session + user funnel by category/brand/price band; monthly conversion (D1); Wilson CIs, chi-square, BH correction | |
+| 6 | Nov 26 | SQL 09–11: cart abandonment (window decided from measured cart→purchase delay), revenue leakage; differentiating analysis (1A or 1B) | |
+| 7 | Nov 27 | SQL 12–16: cohort retention, repeat purchase, RFM segments + profiles | |
+| 8 | Nov 28 | Propensity model: features, time split, logistic vs gradient boosting, calibration, importance | |
+| 9 | Nov 29 | Bootstrap CIs on recovery; export tables; Excel what-if model; reconciliation check | |
+| 10 | Nov 30 | Power BI 4-page dashboard | |
+| — | Dec 1 | **Buffer** (Power BI overflow / catch-up) | |
+| 11 | Dec 2 | Insights report, executive one-pager, limitations, A/B test plan; README | |
+| 12 | Dec 3 | Streamlit app + deploy; PDF + GIF; Publish to web; v1.0 release candidate | |
+| — | Dec 4–5 | **Buffer + final review**; v1.0 release | |
 
-**Hard deadline: 2026-11-27.** If a day slips, cut in this order: Streamlit → GIF → extra SQL beyond 15. Never cut the core analysis, the model or the A/B plan.
+**Hard deadline: 2026-12-05.** Scope is fixed (user, 2026-11-24): if a day slips, use the buffer days first and raise it with the user before any cut. The original cut order (Streamlit → GIF → extra SQL beyond 15) applies only if the user approves a cut.
 
 ## User profile (answered 2026-11-15)
 - Windows, 16 GB RAM, enough disk. Power BI Desktop is available.
@@ -68,7 +71,8 @@ Every day ends with commit + push and an update to Status below.
   2. **Order (proxy):** one purchasing session, i.e. a `user_session` containing ≥1 `purchase` event, counts as one order. Always state that this is a proxy, **not a verified order count**, because `order_id` is unavailable.
   3. **Estimated purchase revenue:** sum of `price` over `purchase` events where `price > 0`, assuming one unit per purchase row (no `quantity` column). Rows with `price ≤ 0` are excluded from this metric but **kept and flagged** in the dataset. The excluded record count and their summed value are always reported separately.
 - **Cleaning gate (user rule, 2026-11-16):** no cleaning or modification of data until the user has seen the audit results and approved the proposed cleaning rules. Raw CSVs are never modified; cleaned output goes to new files only.
-- Scope additions approved 2026-11-15: propensity model (DS) and A/B test plan (PA). If time runs short, cut Streamlit/CI first, not these.
+- Scope additions approved 2026-11-15: propensity model (DS) and A/B test plan (PA).
+- **Deadline extended to 2026-12-05 with full scope (2026-11-24).** No component is removed or simplified without the user's explicit approval.
 
 ## Status
 - [x] Project plan, roadmap and upgrade plan written
@@ -86,7 +90,8 @@ Every day ends with commit + push and an update to Status below.
 - [x] Day 4 plan approved 2026-11-24 (D1: overall conversion on Day 4, monthly on Day 5; D2: dedup counts default + raw alongside; D3: top 10 by revenue + 'other', 'unknown' brand separate; D4: Nov 21–28 peak and Dec 26–Jan 1 trough labelled as observed only, no cause).
 - [x] Day 4 code (Claude, synthetic data only): `sql/01`–`04` (10 named queries), `src/kpis.py` (40 validations incl. Day 3 reconciliation; publishes only if all pass), pipeline step `kpis`, `tests/test_kpis.py`. Full-scale synthetic: KPIs ~14s, deterministic. **Bug found by the Day 4 reconciliation and fixed in `src/clean.py`:** monthly A2 counted a NULL session group when a valid purchase had no session. Real data unaffected (no such purchases); a validation (38 total) and a regression test were added.
 - [ ] Day 4 user run: `git pull` → `python -m pytest` → `python -m src.pipeline --steps verify,clean,kpis` → `python -m pytest` → push `reports/day03_cleaning*` (re-generated; must be unchanged apart from timings and the new check) + `reports/day04_kpi_report.md` + `reports/day04_kpis/` → Claude verifies and writes the findings note  ← **NEXT**
-- [ ] **Schedule:** on 2026-11-24 (planned Day 9) the project is at Day 4, about 5 days behind with the deadline on Nov 27. A re-plan is needed: options presented to the user 2026-11-24.
+- [x] **Schedule:** user chose Option A on 2026-11-24: deadline extended to **2026-12-05**, full scope kept. Timeline table updated.
+- [ ] Day 5 (Nov 25): plan to be presented for approval; it depends on the Day 4 real-data run being verified first
 - [ ] Open decisions: cart-abandonment window (W1–W4, decide at the start of Day 6 after measuring cart→purchase delay); whether cart-leakage value uses `event_copies` (Day 6); session month attribution (first event; proposed 2026-11-24); Day 5 proposed metrics in `docs/metric_definitions.md` §3
 
 ## Conversation log (key points, newest last)
@@ -119,4 +124,5 @@ Every day ends with commit + push and an update to Status below.
   - Testing found and fixed: SQL alias error; results whose order could change between runs (UNION ALL); counts printed as floats; a NaN in the data-quality test. A synthetic month-boundary bug was correctly caught by validation (output refused).
   - Day 3 real results: 15,667,350 deduplicated rows (`SUM(event_copies)` = 16,536,158); estimated purchase revenue (A1) 5,141,266.90 (raw 5,144,461.71 − 3,194.81 from 789 valid-price duplicate copies; the other 4 of the 793 duplicate purchase copies have non-positive prices); non-positive purchases 92 / −2,746.05; purchasing sessions (A2) 126,503. Splitting shared IDs and excluding non-positive purchases changed none of them, so all 126,503 contain a valid purchase. By month of first valid purchase: 29,326 / 36,377 / 28,687 / 32,113. 670 purchasing sessions have purchases in two months and are counted once. Session keys 3,614,959 (+234 from splitting 191 shared IDs). Parquet 448.1 MB.
 - **2026-11-24 (Day 4):** the user approved D1–D4. Day 4 SQL, runner and tests built and pushed. The Day 4 reconciliation exposed a Day 3 monthly A2 bug (fixed, with no effect on real data). Schedule warning raised: 5 days behind.
+- **2026-11-24:** user approved Option A: deadline 2026-12-05, original scope and quality kept, real-data runs prioritised. Timeline rewritten with buffers on Dec 1 and Dec 4–5.
 
