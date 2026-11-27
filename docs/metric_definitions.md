@@ -100,19 +100,102 @@ Output tables: `reports/day04_kpis/*.csv`, from `sql/01`–`sql/04`. **Additive*
 
 **Limitation: monthly AOV.** `aov_proxy` in the monthly table divides revenue by **event month** by purchasing sessions by **month of first valid purchase**. Sessions with valid purchases in two months (**670** in the Day 3 real data) put second-month revenue over a session counted in the earlier month, so monthly AOV is approximate. The **period-level** AOV has no such mismatch.
 
-**Day 5 funnel decisions ✅ (approved 2026-11-24, F1–F7; to be implemented after the Day 4 real-data run is verified)**
+## 3b. Day 5 funnel ✅ (approved 2026-11-24 and 2026-11-27)
+
+Implemented in `sql/05`–`sql/08` and `src/funnel.py`; statistics in `src/stats.py`.
+Approvals: F1–F7 (2026-11-24); N1–N7, R, S and four corrections to the method (2026-11-27); two final corrections (2026-11-27). Where a later decision amends an earlier one, both are shown.
+
+### Decisions
 
 | ID | Decision |
 |---|---|
-| F1 | **Session stage flags are independent:** `reached_view`, `reached_cart`, `reached_purchase` (valid) are set only by an event of that stage, never inferred from a later stage. Report conditional rates (cart ÷ view sessions, purchase ÷ cart sessions) **and** the share of purchasing sessions with no cart event. |
-| F2 | **User-level funnel:** per user, for the whole period and per month: viewed, carted, made a valid purchase |
-| F3 | **Segment funnels** use as denominator the **sessions that touched the segment** (any event in that category / brand / price band). Cart and purchase rates are measured against that. |
-| F4 | **Price bands:** five bands from quintiles of each product's median positive price, computed at run time, with the band edges published |
-| F5 | **Segments:** as Day 4: top 10 categories and brands by revenue, plus "other", plus "unknown" brand |
-| F6 | **Statistics:** Wilson 95% confidence interval per rate; chi-square test across segments; each segment vs the rest by two-proportion z-test with Benjamini–Hochberg false-discovery-rate correction (q = 0.05); effect sizes in percentage points |
-| F7 | **A difference is reported as meaningful only if** \|difference\| ≥ **1 percentage point** **and** it's significant after correction. Both conditions are shown. |
-| — | Stated limitation: sessions of the same user aren't independent. Overall rates are re-estimated by resampling whole users as a robustness check. |
-| — | Monthly session and user conversion (D1) are reported on Day 5. |
+| F1 | **Session stage flags are independent** ("at least one"): V = any view, C = any cart, P = any **valid** purchase (A2). A flag is set only by its own event type, never inferred. |
+| F2 | **User-level funnel:** the same flags per user, for the whole period and per calendar month |
+| F3 | **Segment funnels:** denominator = sessions that **touched** the segment (any event of a product in it); stages = cart / valid purchase **in** the segment |
+| F4 | **Price bands** (as corrected 2026-11-27): (1) each product's **median positive price** over its deduplicated events; (2) quintile boundaries (20/40/60/80th percentiles) **across products**, one weight per product; (3) band *k* if boundary *k−1* < median ≤ boundary *k*, so identical medians share a band; (4) products with no positive price go in "no valid price": reported, never banded, excluded from tests. Events inherit their product's band. |
+| F5 | **Segments:** top 10 categories / brands by estimated revenue (same rule as Day 4); every other category or known brand → "other"; missing brand → "unknown" (never ranked) |
+| F6 | ~~Wilson CI; chi-square across segments; z-tests~~ **Superseded by S (2026-11-27)**: the user-clustered bootstrap below. Wilson intervals are kept only as a naive reference. |
+| F7 | **Meaningful** = BH-adjusted p < 0.05 **and** \|difference\| ≥ **1 percentage point**. Both shown. |
+| N1 | Three views: **stage reach** (share of all sessions), **strict nested funnel** V → V∩C → V∩C∩P (**primary**, so conversion + drop-off = 100%), and the **8-way path breakdown** |
+| N2 | View and cart count at any price; purchase needs price > 0 |
+| N3 | Primary funnel ignores order. Diagnostic: share of V∩C∩P sessions with first view ≤ first cart ≤ first purchase (same-second ties count as in order). |
+| N4 | **Monthly session funnel:** each session, with all its flags, belongs to the month of its **first event** |
+| N5 | User funnel over the whole period and calendar months; rows without a session are included at user level |
+| N6 | Sensitivity (nothing removed): without sessions over 24 h; without the top 0.1% of sessions by events; first-day (2019-10-01) check |
+| N7 / S | **User-clustered Poisson bootstrap**, B = 1,000, seed 20191001. **95% percentile CIs**; tests = Wald z with the **bootstrap SE**; **Benjamini–Hochberg** (q = 0.05) within each family; **no omnibus chi-square** |
+| R | **Cross-session recovery: ordered is primary, unordered shown alongside** (see below) |
+
+### Definitions
+
+| Metric | Definition |
+|---|---|
+| Session conversion | \|P\| ÷ all sessions: identical to Day 4 |
+| Strict view → cart | \|V∩C\| ÷ \|V\| |
+| Strict cart → purchase | \|V∩C∩P\| ÷ \|V∩C\| |
+| Strict view → purchase | \|V∩C∩P\| ÷ \|V\| |
+| Drop-off at a stage | 100% − that stage's conversion |
+| Cart → purchase, any view (F1 rate) | \|C∩P\| ÷ \|C\| |
+| Purchases outside the strict funnel | \|P \ (V∩C)\| ÷ \|P\| |
+| User conversion | buyers ÷ visitors (identical to Day 4); user strict rates as above, per user |
+| **Carting users** | Users with ≥ 1 cart event **in a session**. A cart only in a row without a session doesn't count, because recovery needs sessions. |
+| Within-session buyers | Carting users with ≥ 1 session containing both a cart and a valid purchase |
+| **Unordered cross-session buyers** | Carting users with a cart in session *s₁* and a valid purchase in a **different** session *s₂* (`session_key` differs; same `user_id`) |
+| **Ordered cross-session recovered** (primary) | As unordered, **and** the purchase is at or after the cart: first cart time in *s₁* ≤ last valid purchase time in *s₂* |
+| Recovery rates | Each group ÷ carting users. **Ordered ⊆ unordered.** Lower bound: carts near 2020-01-31 have little time to be recovered. |
+| Recovery identity | carting buyers = within-session buyers + unordered cross-session buyers − (users in both) |
+| Monthly reconciliation | P(first-event month *m*) − P(first-purchase month *m*) = incoming(*m*) − outgoing(*m*). Incoming = purchasing sessions with first event in *m* but first valid purchase in another month; outgoing = first valid purchase in *m* but first event in another month. Σ incoming = Σ outgoing, so the totals are equal. |
+| Segment rate (X) | Sessions touching X with a cart / valid purchase **in X** ÷ sessions touching X |
+| Rest rate (X) | Sessions in the family **not** touching X with a cart / valid purchase on any family segment ÷ those sessions. Same bootstrap weights as X. |
+| Design effect | (bootstrap SE)² ÷ naive binomial variance: how much clustering by user widens uncertainty |
+
+### Validation (any failure stops `src/funnel.py`; nothing is published)
+- **Matches Day 4:**
+  - sessions, purchasing sessions, visitors, buyers, session and user conversion
+  - monthly sessions, visitors, buyers, and purchasing sessions by first purchase
+  - the top-10 category and brand lists
+- **Consistency:**
+  - each path breakdown adds up to its total
+  - strict funnels never increase, and conversion + drop-off = 100%
+- **Recovery:**
+  - unordered and ordered are **each** computed two independent ways, and the two agree for every user
+  - ordered ⊆ unordered
+  - the recovery identity above holds
+- **Monthly:** the identity above holds in every month; Σ incoming = Σ outgoing; totals equal
+- **Price bands:**
+  - boundaries strictly increasing
+  - one band per product
+  - banded + "no valid price" = all products
+  - "no valid price" = products without a positive price
+  - each band agrees with its product's median
+- **Segments:** rates between 0% and 100%; segment sessions ≤ family sessions; category and brand families cover every session
+- **Bootstrap** (corrected 2026-11-27: there is *no* requirement that the estimate lie inside its interval):
+  - every rate is valid for each user
+  - all-ones weights reproduce the exact totals
+  - re-running the first batch with the same seed gives identical results
+  - no failed resamples
+  - interval bounds are finite, low ≤ high, and within [0, 1]
+  - standard errors > 0
+  - p-values are valid, and BH-adjusted p ≥ raw p
+  - the "meaningful" flag follows F7
+  - point estimates equal the SQL tables
+
+### Day 5 output column dictionary (`reports/day05_funnel/`)
+
+| File / column | Meaning |
+|---|---|
+| `session_stage_reach`, `user_stage_reach` | Stage reach (view A). `session_conversion_pct` / `user_conversion_pct` match Day 4. |
+| `session_strict_funnel`, `user_strict_funnel` | Strict funnel (view B): `conversion_from_previous_pct`, `dropoff_from_previous_pct`, `conversion_from_view_pct` |
+| `session_paths`, `user_paths` | All V/C/P combinations present; `share_pct` of the total |
+| `session_funnel_metrics` | Supporting counts: purchases outside the strict funnel, without cart / view, cart sessions with a removal, single-event sessions |
+| `order_diagnostic` | Time-order check of strict-funnel converters |
+| `recovery_summary` | Carting users, carting buyers, within-session, unordered, ordered, overlap, rates |
+| `monthly_session_funnel` | By first-event month: counts and rates, plus `purchasing_sessions_by_first_purchase`, `incoming`, `outgoing`, `difference` |
+| `monthly_user_funnel` | Users active in each month and their stages |
+| `category_funnel`, `brand_funnel`, `price_band_funnel` | Per segment: `sessions_touched`, `users_touched`, cart / purchase counts and rates, `rest_*` rates. **Not additive across rows.** |
+| `price_band_boundaries`, `price_band_products`, `price_band_no_valid_price_sessions` | Band edges, products per band, and sessions touching unbanded products |
+| `sensitivity`, `start_of_data_check` | N6 checks |
+| `rates_with_ci.csv` | Every rate: `numerator`, `denominator`, `rate`, `ci_low`/`ci_high` (clustered percentile), `se_boot`, `wilson_low`/`wilson_high` (naive), `design_effect` |
+| `comparisons.csv` | Every test: `diff_pp`, `diff_ci_low_pp`/`diff_ci_high_pp`, `se_boot_pp`, `z`, `p_value`, `p_adj_bh`, `significant_bh`, `meaningful` |
 
 ## 4. Cart abandonment window ⏳ (decision pending: options for review)
 
@@ -144,6 +227,7 @@ So "cart without purchase in the same session" will overstate abandonment by an 
 | Date | Change |
 |---|---|
 | 2026-11-16 | Approved: UTC; order proxy; estimated revenue |
+| 2026-11-27 | Day 5 funnel method finalised (§3b): N1–N7, R (ordered primary), S (clustered bootstrap; F6 superseded), F4 corrected (product medians → quintiles across products), recovery identity and monthly incoming/outgoing reconciliation, bootstrap checks without the inside-interval requirement. |
 | 2026-11-24 | Day 4 audit follow-ups: column dictionary (§3a); duplicate-copies clarification; monthly AOV limitation; R1 `products_sold` → `distinct_products_purchased`; R2 `share_of_known_brand_revenue_pct`; R3 `dup_purchase_copies_all`. No change to revenue, purchasing-session or conversion calculations. |
 | 2026-11-24 | Day 4 metrics approved (D1–D4). Session month attribution (first event) approved. Day 5 funnel decisions F1–F7 approved (F7: 1 pp + significant after correction). |
 | 2026-11-18 | A1 (merged purchases counted once) and A2 (purchasing sessions, keyed, valid purchases only) approved. Cleaning conventions C1–C12 approved. Abandonment window left pending with options W1–W4. |

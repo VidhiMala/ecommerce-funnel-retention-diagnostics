@@ -1,6 +1,6 @@
 # E-commerce Funnel & Retention Diagnostics
 
-> 🚧 Work in progress (Day 4 of 12). Executive summary will be added once the analysis is complete.
+> 🚧 Work in progress (Day 5 of 12). Executive summary will be added once the analysis is complete.
 
 End-to-end analysis of real e-commerce clickstream data (REES46 cosmetics store, Oct 2019 – Jan 2020):
 conversion funnel, cart abandonment, cohort retention, RFM segmentation, purchase-propensity modelling,
@@ -48,7 +48,7 @@ python -m src.manifest verify
 ```
 If this reports a mismatch (for example a newer dataset version on Kaggle), stop: results won't be comparable.
 
-**4. Rebuild everything** (verify → audit → clean → kpis; later stages are added as the project grows)
+**4. Rebuild everything** (verify → audit → clean → kpis → funnel; later stages are added as the project grows)
 ```bash
 python -m src.pipeline
 ```
@@ -71,6 +71,9 @@ Tests on real data skip automatically when the cleaned data isn't present.
 | `reports/day03_cleaning_log.md` | Cleaning results and validations |
 | `sql/01`–`sql/04` | Business performance queries (KPIs, trends, weekday/hour, categories/brands) |
 | `reports/day04_kpi_report.md` | Day 4 KPI results and validations |
+| `sql/05`–`sql/08` | Funnel queries: session/user funnels, cross-session recovery, monthly, category/brand/price-band funnels |
+| `src/stats.py` | User-clustered bootstrap, Benjamini–Hochberg, Wilson reference intervals |
+| `reports/day05_funnel_report.md` | Day 5 funnel results, confidence intervals, tests and validations |
 
 ## Data
 REES46 eCommerce events, cosmetics shop — Kaggle: `mkechinov/ecommerce-events-history-in-cosmetics-shop`.
