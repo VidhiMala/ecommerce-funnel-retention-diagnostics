@@ -1,0 +1,9 @@
+has_view,has_cart,has_valid_purchase,sessions,share_pct
+True,True,True,86873,2.4032
+True,True,False,556025,15.3812
+True,False,True,7948,0.2199
+True,False,False,2760513,76.3636
+False,True,True,16097,0.4453
+False,True,False,141312,3.9091
+False,False,True,15585,0.4311
+False,False,False,30606,0.8466

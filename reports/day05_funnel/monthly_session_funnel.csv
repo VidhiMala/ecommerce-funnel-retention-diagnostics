@@ -1,0 +1,5 @@
+month_utc,sessions,sessions_with_view,sessions_with_cart,purchasing_sessions,view_cart_sessions,view_cart_purchase_sessions,session_conversion_pct,view_to_cart_pct,cart_to_purchase_nested_pct,purchasing_sessions_by_first_purchase,incoming,outgoing,difference
+2019-10,873984,826284,228491,29698,191181,20870,3.398,23.1374,10.9164,29326,372,0,372
+2019-11,940165,881871,212040,36202,167343,24695,3.8506,18.9759,14.7571,36377,80,255,-175
+2019-12,837539,792299,164443,28608,129373,19559,3.4157,16.3288,15.1183,28687,37,116,-79
+2020-01,963271,910905,195333,31995,155001,21749,3.3215,17.0162,14.0315,32113,0,118,-118

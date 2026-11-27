@@ -81,7 +81,7 @@ def build_bases_and_rates(con) -> tuple[list[stats.Base], list[stats.Rate], list
 
     # session-level counts per user
     s = _arr(con, "SELECT * FROM q__user_session_counts ORDER BY u_pos")
-    for col in ["sessions", "v", "c", "p", "vc", "vcp", "cp"]:
+    for col in ["sessions", "v", "c", "p", "vc", "vcp", "cp", "vc_chron", "vcp_chron"]:
         add_base(f"s_{col}", s["u_pos"], s[col])
     # user-level flags
     u = _arr(con, """SELECT i.u_pos, f.uv::INT uv, f.uc::INT uc, f.up::INT up,
@@ -100,15 +100,18 @@ def build_bases_and_rates(con) -> tuple[list[stats.Base], list[stats.Rate], list
 
     R = lambda name, num, den, group: rates.append(stats.Rate(name, num, den, group))  # noqa: E731
     R("session_conversion", {"s_p": 1}, {"s_sessions": 1}, "session")
-    R("session_view_to_cart_strict", {"s_vc": 1}, {"s_v": 1}, "session")
-    R("session_cart_to_purchase_strict", {"s_vcp": 1}, {"s_vc": 1}, "session")
-    R("session_view_to_purchase_strict", {"s_vcp": 1}, {"s_v": 1}, "session")
+    R("session_view_to_cart_nested", {"s_vc": 1}, {"s_v": 1}, "session")
+    R("session_cart_to_purchase_nested", {"s_vcp": 1}, {"s_vc": 1}, "session")
+    R("session_view_to_purchase_nested", {"s_vcp": 1}, {"s_v": 1}, "session")
+    R("session_view_to_cart_chronological", {"s_vc_chron": 1}, {"s_v": 1}, "session")
+    R("session_cart_to_purchase_chronological", {"s_vcp_chron": 1}, {"s_vc_chron": 1}, "session")
+    R("session_view_to_purchase_chronological", {"s_vcp_chron": 1}, {"s_v": 1}, "session")
     R("session_cart_to_purchase_any_view", {"s_cp": 1}, {"s_c": 1}, "session")
-    R("session_purchase_outside_strict_share", {"s_p": 1, "s_vcp": -1}, {"s_p": 1}, "session")
+    R("session_purchase_outside_nested_share", {"s_p": 1, "s_vcp": -1}, {"s_p": 1}, "session")
     R("user_conversion", {"u_up": 1}, {"u_visitor": 1}, "user")
-    R("user_view_to_cart_strict", {"u_uvc": 1}, {"u_uv": 1}, "user")
-    R("user_cart_to_purchase_strict", {"u_uvcp": 1}, {"u_uvc": 1}, "user")
-    R("user_view_to_purchase_strict", {"u_uvcp": 1}, {"u_uv": 1}, "user")
+    R("user_view_to_cart_nested", {"u_uvc": 1}, {"u_uv": 1}, "user")
+    R("user_cart_to_purchase_nested", {"u_uvcp": 1}, {"u_uvc": 1}, "user")
+    R("user_view_to_purchase_nested", {"u_uvcp": 1}, {"u_uv": 1}, "user")
     R("recovery_within_session_rate", {"r_within": 1}, {"r_carting": 1}, "recovery")
     R("recovery_ordered_rate", {"r_ordered": 1}, {"r_carting": 1}, "recovery")
     R("recovery_unordered_rate", {"r_unordered": 1}, {"r_carting": 1}, "recovery")
@@ -177,7 +180,8 @@ def validate_sql(con, day4_dir: Path | None) -> list[Check]:
         _one(con, "SELECT SUM(sessions) FROM q_session_paths"))
     add("user paths sum to all users", _one(con, "SELECT COUNT(*) FROM q__user_flags"),
         _one(con, "SELECT SUM(users) FROM q_user_paths"))
-    for t, col in [("q_session_strict_funnel", "sessions"), ("q_user_strict_funnel", "users")]:
+    for t, col in [("q_session_nested_funnel", "sessions"), ("q_user_nested_funnel", "users"),
+                   ("q_session_chronological_funnel", "sessions")]:
         add(f"{t[2:]}: never increases", True, _one(con, f"""
             SELECT bool_and(x <= prev) FROM (SELECT {col} AS x, LAG({col}) OVER (ORDER BY stage_order) AS prev FROM {t})
             WHERE prev IS NOT NULL"""))
@@ -187,6 +191,26 @@ def validate_sql(con, day4_dir: Path | None) -> list[Check]:
     add("session purchases = A2 purchasing sessions (direct count)", _one(con, """
         SELECT COUNT(DISTINCT session_key) FROM events WHERE event_type='purchase' AND is_valid_price AND has_session"""),
         _one(con, "SELECT sessions_with_valid_purchase FROM q_session_stage_reach"))
+
+    # Chronological funnel (approved 2026-11-27)
+    add("chronological: two independent path computations agree for every session", 0, _one(con, """
+        SELECT COUNT(*) FROM q__session_chrono WHERE chron_vcp <> path_b"""))
+    add("chronological: each stage is a subset of the nested (presence-based) stage", 0, _one(con, """
+        SELECT COUNT(*) FROM q__session_chrono c JOIN q__session_flags f USING (session_key)
+        WHERE (c.chron_vc AND NOT (f.v AND f.c)) OR (c.chron_vcp AND NOT (f.v AND f.c AND f.p))
+           OR (c.chron_vcp AND NOT c.chron_vc)"""))
+    add("chronological: one row per session", _one(con, "SELECT COUNT(*) FROM q__session_flags"),
+        _one(con, "SELECT COUNT(*) FROM q__session_chrono"))
+    add("order diagnostic: first-occurrence order <= chronological path <= nested converters", True, _one(con, """
+        SELECT in_first_occurrence_order <= with_chronological_path
+           AND with_chronological_path <= view_cart_purchase_sessions FROM q_order_diagnostic"""))
+    add("order diagnostic: chronological-path count = chronological funnel stage 3", _one(con, """
+        SELECT sessions FROM q_session_chronological_funnel WHERE stage_order = 3"""),
+        _one(con, "SELECT with_chronological_path FROM q_order_diagnostic"))
+    add("order diagnostic: out of first-occurrence order = cart-before-view + purchase-before-cart - both", 0, _one(con, """
+        SELECT COUNT(*) FROM q__session_flags WHERE v AND c AND p
+          AND NOT ((first_view_utc <= first_cart_utc) AND (first_cart_utc <= first_purchase_utc))
+          AND NOT (first_cart_utc < first_view_utc OR first_purchase_utc < first_cart_utc)"""))
 
     # Recovery: independent methods, subset, identity
     add("recovery: unordered method A = method B (every user)", 0,
@@ -282,10 +306,23 @@ def validate_bootstrap(summary: pd.DataFrame, comps: pd.DataFrame, point_sql: di
     add("comparisons: difference CI bounds finite, low <= high, within [-100, 100] pp", 0, int((~(
         np.isfinite(comps.diff_ci_low_pp) & np.isfinite(comps.diff_ci_high_pp) & (comps.diff_ci_low_pp <= comps.diff_ci_high_pp)
         & comps.diff_ci_low_pp.between(-100, 100) & comps.diff_ci_high_pp.between(-100, 100))).sum()))
-    add("comparisons: p in [0, 1]; BH-adjusted p >= raw p and <= 1", 0, int((~(
-        comps.p_value.between(0, 1) & (comps.p_adj_bh >= comps.p_value - 1e-15) & (comps.p_adj_bh <= 1))).sum()))
+    lp, la = comps.log10_p_value, comps.log10_p_adj_bh
+    add("comparisons: log10 p finite and <= 0; log10 BH-adjusted >= log10 raw and <= 0", 0, int((~(
+        np.isfinite(lp) & np.isfinite(la) & (lp <= 0) & (la <= 0) & (la >= lp - 1e-12))).sum()))
+    sm_bad = 0
+    for _, g in comps.groupby("family"):
+        ref = stats.bh_adjust(g.p_value.to_numpy())                 # statsmodels on the float p-values
+        rep = g.p_value.to_numpy() > 1e-300                         # representable (not underflowed)
+        sm_bad += int((np.abs(np.log10(ref[rep]) - g.log10_p_adj_bh.to_numpy()[rep]) > 1e-9).sum())
+    add("comparisons: log-space BH = statsmodels wherever p is representable", 0, sm_bad)
+    add("comparisons: p_value / p_adj_bh = 10 ** log10 columns (0.0 only where < ~1e-308)", 0, int((~(
+        np.isclose(comps.p_value, np.power(10.0, lp), rtol=1e-12, atol=0)
+        & np.isclose(comps.p_adj_bh, np.power(10.0, la), rtol=1e-12, atol=0))).sum()))
     add("comparisons: 'meaningful' = BH-significant AND |difference| >= 1 pp", 0, int((comps.meaningful != (
-        (comps.p_adj_bh < stats.ALPHA) & (comps.diff_pp.abs() >= stats.PRACTICAL_PP))).sum()))
+        (la < np.log10(stats.ALPHA)) & (comps.diff_pp.abs() >= stats.PRACTICAL_PP))).sum()))
+    shown = [stats.format_p(v) for v in list(comps.p_value) + list(comps.p_adj_bh)]
+    add("report: no p-value displayed as an exact-looking zero", 0,
+        sum(1 for t in shown if t.replace("0", "").replace(".", "") == "" or t in ("0", "0.0", "-0")))
     s = summary.set_index("metric")
     for name, sql_value in point_sql.items():
         add(f"point estimate = SQL table: {name}", round(sql_value, 4), round(100 * s.loc[name, "rate"], 4))
@@ -296,12 +333,15 @@ def validate_bootstrap(summary: pd.DataFrame, comps: pd.DataFrame, point_sql: di
 
 REPORT_TABLES = [
     ("Session funnel: stage reach (all sessions)", "session_stage_reach"),
-    ("Session funnel: strict nested funnel (primary)", "session_strict_funnel"),
+    ("Session funnel: nested (presence-based) funnel (primary)", "session_nested_funnel"),
+    ("Session funnel: chronological (alongside the primary): view → cart at/after first view → valid purchase at/after that cart",
+     "session_chronological_funnel"),
     ("Session funnel: all 8 paths", "session_paths"),
     ("Session funnel: supporting counts", "session_funnel_metrics"),
-    ("Order diagnostic (strict-funnel converters)", "order_diagnostic"),
+    ("Order diagnostic: first-occurrence order, and sessions with any chronological path (nested-funnel converters)",
+     "order_diagnostic"),
     ("User funnel: stage reach", "user_stage_reach"),
-    ("User funnel: strict nested funnel", "user_strict_funnel"),
+    ("User funnel: nested (presence-based) funnel", "user_nested_funnel"),
     ("User funnel: all 8 paths", "user_paths"),
     ("Cross-session recovery (carting users)", "recovery_summary"),
     ("Monthly session funnel (session month = month of first event) with Day 4 reconciliation", "monthly_session_funnel"),
@@ -319,12 +359,15 @@ REPORT_TABLES = [
 NOTES = """
 ## How to read this report
 - **Levels and denominators.** *Session* rates use sessions with a session ID (3,614,959 in Day 4); *user* rates use users (1,341,499). The two answer different questions and are always labelled.
-- **Strict funnel (primary):** nested groups view → view+cart → view+cart+valid purchase. Conversion + drop-off = 100% at each step. Purchases that skip a stage within the session are not hidden: see *paths* and `session_purchase_outside_strict_share`.
+- **Nested (presence-based) funnel (primary):** nested groups view → view+cart → view+cart+valid purchase. Conversion + drop-off = 100% at each step. It checks that the events are **present** in the session, **not their order**. Purchases that skip a stage within the session are not hidden: see *paths* and `session_purchase_outside_nested_share`.
+- **Chronological funnel (alongside):** view → a cart at or after the first view → a valid purchase at or after that cart (same-second ties count as ordered). It is a subset of the nested funnel at every stage. Sessions where the view wasn't logged before the cart (a known logging gap, audit DQ-07) fall out of it, so neither funnel is "the truth": the gap between them is the share of activity whose order can't be confirmed.
+- **First-occurrence order** (diagnostic): first view ≤ first cart ≤ first purchase. It's stricter than "an ordered path exists"; both counts are shown.
 - **Overall session conversion** = purchasing sessions ÷ all sessions: the same figure as Day 4.
 - **Purchasing sessions** approximate orders; they are **not an exact order count** (no order ID in the data).
 - **Cross-session recovery** (decision R): among users with a cart in a session, the share who made a valid purchase in a *different* session. **Ordered** (primary) also requires the purchase at or after the cart. **Unordered** is shown alongside, and ordered ⊆ unordered. The data ends 2020-01-31, so late carts have little time: recovery is a lower bound.
 - **Monthly session funnel:** each session counts in the month of its first event. Purchasing sessions therefore differ slightly from Day 4's monthly figures (month of first valid purchase): *difference = incoming − outgoing*, totals equal.
 - **Segment funnels:** rates are per session that **touched** the segment. "Rest" = sessions in the family that did not touch it. Segment rows are **not additive**.
+- **p-values:** computed in log space to avoid numerical underflow. The report shows p < 0.0001 as **"<0.0001"** (raw and adjusted), never as 0. `comparisons.csv` has exact `log10_p_value` and `log10_p_adj_bh`. The `p_value` / `p_adj_bh` columns are kept for compatibility, but they underflow to 0.0 below about 1e-308 (|z| > ~37.5); use the log10 columns there.
 - **Uncertainty and tests** (decision S): user-clustered Poisson bootstrap, B = 1,000, fixed seed. CIs are 95% percentile intervals. Tests are Wald z using the bootstrap SE, with Benjamini–Hochberg per family. **Meaningful = BH-adjusted p < 0.05 AND |difference| ≥ 1 percentage point** (F7). Wilson intervals assume independent sessions and are shown only for reference; the **design effect** shows how much clustering widens uncertainty.
 - **Sensitivity rows** recompute rates with some sessions left out; the cleaned data is unchanged.
 - **All times UTC.** Observed patterns only; no causes are claimed.
@@ -352,15 +395,18 @@ def write_report(path: Path, ok: bool, checks: list[Check], tables: dict, summar
                                        "wilson_low_pct", "wilson_high_pct", "design_effect"]].round(4))]
         for title, key in REPORT_TABLES:
             lines += ["", f"## {title}", "", df_to_markdown(tables[key])]
-        show = ["comparison", "rate_a", "rate_b", "diff_pp", "diff_ci_low_pp", "diff_ci_high_pp", "p_adj_bh",
-                "significant_bh", "meaningful"]
+        show = ["comparison", "rate_a", "rate_b", "diff_pp", "diff_ci_low_pp", "diff_ci_high_pp", "p_value",
+                "p_adj_bh", "significant_bh", "meaningful"]
         for fam in ["monthly:session_conversion", "monthly:user_conversion", "category:cart_rate",
                     "category:purchase_rate", "brand:cart_rate", "brand:purchase_rate", "price_band:cart_rate",
                     "price_band:purchase_rate"]:
             sub = comps[comps.family == fam][show].copy()
             sub[["rate_a", "rate_b"]] = (100 * sub[["rate_a", "rate_b"]]).round(4)
+            sub[["diff_pp", "diff_ci_low_pp", "diff_ci_high_pp"]] = sub[["diff_pp", "diff_ci_low_pp", "diff_ci_high_pp"]].round(4)
+            sub["p_value"] = sub["p_value"].map(stats.format_p)        # never a rounded / underflowed 0
+            sub["p_adj_bh"] = sub["p_adj_bh"].map(stats.format_p)
             sub = sub.rename(columns={"rate_a": "rate_a_pct", "rate_b": "rate_b_pct"})
-            lines += ["", f"## Tests: {fam}", "", df_to_markdown(sub.round(6))]
+            lines += ["", f"## Tests: {fam}", "", df_to_markdown(sub)]
         lines += [NOTES]
     lines += ["", "## Validations", "", df_to_markdown(pd.DataFrame([{
         "#": i, "check": c.name, "result": "PASS" if c.passed else "**FAIL**",
@@ -386,8 +432,10 @@ def run_funnel(clean_dir: Path, out_md: Path, csv_dir: Path, day4_dir: Path | No
         point_sql = {
             "session_conversion": _one(con, "SELECT session_conversion_pct FROM q_session_stage_reach"),
             "user_conversion": _one(con, "SELECT user_conversion_pct FROM q_user_stage_reach"),
-            "session_view_to_cart_strict": _one(con, "SELECT conversion_from_previous_pct FROM q_session_strict_funnel WHERE stage_order = 2"),
-            "session_cart_to_purchase_strict": _one(con, "SELECT conversion_from_previous_pct FROM q_session_strict_funnel WHERE stage_order = 3"),
+            "session_view_to_cart_nested": _one(con, "SELECT conversion_from_previous_pct FROM q_session_nested_funnel WHERE stage_order = 2"),
+            "session_cart_to_purchase_nested": _one(con, "SELECT conversion_from_previous_pct FROM q_session_nested_funnel WHERE stage_order = 3"),
+            "session_view_to_cart_chronological": _one(con, "SELECT conversion_from_previous_pct FROM q_session_chronological_funnel WHERE stage_order = 2"),
+            "session_cart_to_purchase_chronological": _one(con, "SELECT conversion_from_previous_pct FROM q_session_chronological_funnel WHERE stage_order = 3"),
             "recovery_ordered_rate": _one(con, "SELECT ordered_recovery_rate_pct FROM q_recovery_summary"),
             "recovery_unordered_rate": _one(con, "SELECT unordered_recovery_rate_pct FROM q_recovery_summary"),
         }
@@ -421,6 +469,10 @@ def run_funnel(clean_dir: Path, out_md: Path, csv_dir: Path, day4_dir: Path | No
         csv_dir.mkdir(parents=True, exist_ok=True)
         out_md.parent.mkdir(parents=True, exist_ok=True)
         if ok:
+            # publish a complete, current set: remove CSVs from earlier runs first (e.g. files whose
+            # names were changed), so no stale output survives next to the new one
+            for old in csv_dir.glob("*.csv"):
+                old.unlink()
             for n in public:
                 tables[n].to_csv(csv_dir / f"{n}.csv", index=False)
             summary.to_csv(csv_dir / "rates_with_ci.csv", index=False)

@@ -1,0 +1,7 @@
+segment,segment_order,products,min_median_price,max_median_price
+band_1,1,10148,0.05,2.29
+band_2,2,11369,2.3,3.97
+band_3,3,7598,3.98,5.54
+band_4,4,11453,5.56,9.51
+band_5,5,10091,9.52,327.78
+no valid price,6,769,,

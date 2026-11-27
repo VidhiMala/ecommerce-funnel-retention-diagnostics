@@ -1,0 +1,4 @@
+scenario,sessions,purchasing_sessions,session_conversion_pct,view_to_cart_pct,cart_to_purchase_nested_pct,events_threshold_p999
+all sessions,3614959,126503,3.4994,18.8458,13.5127,140
+excluding sessions over 24h,3592168,124276,3.4596,18.7406,13.3517,140
+excluding top 0.1% sessions by events,3611326,124970,3.4605,18.7662,13.3511,140

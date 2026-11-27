@@ -16,6 +16,7 @@ Part A fixture (UTC):
 Product medians 2,3,4,4,5,6,8,12 -> boundaries 3.4 / 4.0 / 5.2 / 7.2; the two 4.00 products sit ON a boundary.
 """
 import hashlib
+import re
 from pathlib import Path
 
 import numpy as np
@@ -99,10 +100,10 @@ def test_all_sql_validations_pass(sqlres):
     assert failed == []
 
 
-def test_session_stage_reach_and_strict_funnel(sqlres):
+def test_session_stage_reach_and_nested_funnel(sqlres):
     r = df(sqlres, "session_stage_reach").iloc[0]
     assert (r.sessions, r.sessions_with_view, r.sessions_with_cart, r.sessions_with_valid_purchase) == (11, 7, 7, 5)
-    f = df(sqlres, "session_strict_funnel")
+    f = df(sqlres, "session_nested_funnel")
     assert list(f.sessions) == [7, 5, 2]
     assert f.conversion_from_previous_pct.iloc[1] == round(100 * 5 / 7, 4) and f.conversion_from_previous_pct.iloc[2] == 40.0
 
@@ -113,18 +114,23 @@ def test_session_paths(sqlres):
     assert got == {(True, True, True): 2, (True, True, False): 3, (True, False, False): 2,
                    (False, True, True): 1, (False, True, False): 1, (False, False, True): 2}
     m = df(sqlres, "session_funnel_metrics").iloc[0]
-    assert (m.purchasing_sessions_outside_strict_funnel, m.purchasing_sessions_without_cart) == (3, 2)
+    assert (m.purchasing_sessions_outside_nested_funnel, m.purchasing_sessions_without_cart) == (3, 2)
 
 
 def test_order_diagnostic(sqlres):
     o = df(sqlres, "order_diagnostic").iloc[0]
-    assert (o.view_cart_purchase_sessions, o.in_time_order) == (2, 2)
+    assert (o.view_cart_purchase_sessions, o.in_first_occurrence_order, o.with_chronological_path) == (2, 2, 2)
+
+
+def test_chronological_funnel_fixture_a(sqlres):
+    # S2a/S3b/S8a: cart after the first view; S1a/S4a: purchase after that cart (S4a crosses midnight)
+    assert list(df(sqlres, "session_chronological_funnel").sessions) == [7, 5, 2]
 
 
 def test_user_funnel(sqlres):
     u = df(sqlres, "user_stage_reach").iloc[0]
     assert (u.visitors, u.users_with_view, u.users_with_cart, u.buyers) == (8, 7, 7, 5)
-    assert list(df(sqlres, "user_strict_funnel").users) == [7, 6, 4]
+    assert list(df(sqlres, "user_nested_funnel").users) == [7, 6, 4]
 
 
 def test_cross_session_recovery(sqlres):
@@ -172,6 +178,59 @@ def test_segment_funnels_shape(sqlres):
     assert df(sqlres, "price_band_no_valid_price_sessions").iloc[0].sessions_touching_no_valid_price_products == 1
 
 
+# ------------------------------------------------------------------ Part A2: interleaved event order
+
+INTERLEAVED = {
+    "2019-Oct.csv": [
+        # I1 cart, view, cart, purchase -> fails FIRST-occurrence order, but an ordered path exists
+        f"2019-10-10 10:00:00 UTC,cart,11,1,,x,1.00,101,{sid(901)}",
+        f"2019-10-10 10:01:00 UTC,view,11,1,,x,1.00,101,{sid(901)}",
+        f"2019-10-10 10:02:00 UTC,cart,11,1,,x,1.00,101,{sid(901)}",
+        f"2019-10-10 10:03:00 UTC,purchase,11,1,,x,1.00,101,{sid(901)}",
+        # I2 cart, view, purchase -> no cart after the first view: chronological stage 2 fails
+        f"2019-10-11 10:00:00 UTC,cart,12,1,,x,2.00,102,{sid(902)}",
+        f"2019-10-11 10:01:00 UTC,view,12,1,,x,2.00,102,{sid(902)}",
+        f"2019-10-11 10:02:00 UTC,purchase,12,1,,x,2.00,102,{sid(902)}",
+        # I3 view, purchase, cart -> cart after view, but no purchase after that cart: stage 3 fails
+        f"2019-10-12 10:00:00 UTC,view,13,1,,x,3.00,103,{sid(903)}",
+        f"2019-10-12 10:01:00 UTC,purchase,13,1,,x,3.00,103,{sid(903)}",
+        f"2019-10-12 10:02:00 UTC,cart,13,1,,x,3.00,103,{sid(903)}",
+        # I4 view, cart, purchase in the same second -> ties count as ordered
+        f"2019-10-13 10:00:00 UTC,view,14,1,,x,4.00,104,{sid(904)}",
+        f"2019-10-13 10:00:00 UTC,cart,14,1,,x,4.00,104,{sid(904)}",
+        f"2019-10-13 10:00:00 UTC,purchase,14,1,,x,4.00,104,{sid(904)}",
+        # I5 ordinary ordered session
+        f"2019-10-14 10:00:00 UTC,view,15,1,,x,5.00,105,{sid(905)}",
+        f"2019-10-14 10:01:00 UTC,cart,15,1,,x,5.00,105,{sid(905)}",
+        f"2019-10-14 10:02:00 UTC,purchase,15,1,,x,5.00,105,{sid(905)}",
+    ],
+    "2019-Nov.csv": [f"2019-11-10 10:00:00 UTC,view,16,1,,x,6.00,106,{sid(906)}"],
+    "2019-Dec.csv": [f"2019-12-10 10:00:00 UTC,view,17,1,,x,7.00,107,{sid(907)}"],
+    "2020-Jan.csv": [f"2020-01-10 10:00:00 UTC,view,18,1,,x,8.00,108,{sid(908)}"],
+}
+
+
+def test_interleaved_order_and_chronological_funnel(tmp_path, monkeypatch):
+    con = kpis.connect_events(_clean(tmp_path, INTERLEAVED, monkeypatch))
+    try:
+        kpis.run_sql_files(con, kpis.SQL_DIR, funnel.FUNNEL_SQL_FILES)
+        assert [c.name for c in funnel.validate_sql(con, None) if not c.passed] == []
+        o = df(con, "order_diagnostic").iloc[0]
+        assert o.view_cart_purchase_sessions == 5                       # nested (presence): I1-I5
+        assert (o.in_first_occurrence_order, o.cart_before_first_view, o.purchase_before_first_cart) == (2, 2, 1)
+        assert o.with_chronological_path == 3                           # I1, I4, I5
+        assert list(df(con, "session_nested_funnel").sessions) == [8, 5, 5]
+        assert list(df(con, "session_chronological_funnel").sessions) == [8, 4, 3]
+        ch = df(con, "_session_chrono").set_index("session_key")
+        key = lambda u, n: f"{u}:{sid(n)}"                              # noqa: E731
+        assert ch.loc[key(101, 901), "chron_vcp"] and not ch.loc[key(102, 902), "chron_vc"]
+        assert ch.loc[key(103, 903), "chron_vc"] and not ch.loc[key(103, 903), "chron_vcp"]
+        assert ch.loc[key(104, 904), "chron_vcp"]                      # same-second ties are ordered
+        assert (ch.chron_vcp == ch.path_b).all()
+    finally:
+        con.close()
+
+
 # ------------------------------------------------------------------ Part B: full pipeline
 
 def _random_rows(n_users=1500, seed=3):
@@ -215,6 +274,8 @@ def test_full_pipeline_passes(full):
     rep = (full["tmp"] / "r1.md").read_text(encoding="utf-8")
     assert "**Validation: PASSED**" in rep and "not an exact order count" in rep and "/home/" not in rep
     assert "bootstrap B = 200, seed 20191001, batch 50" in rep                    # header states what actually ran
+    assert "Session funnel: nested (presence-based) funnel (primary)" in rep
+    assert not re.search(r"\bstrict\b", rep, flags=re.IGNORECASE)          # old label fully gone
     rates = pd.read_csv(full["tmp"] / "c1" / "rates_with_ci.csv").set_index("metric")
     assert {"session_conversion", "recovery_ordered_rate", "recovery_unordered_rate"} <= set(rates.index)
     assert rates.loc["recovery_ordered_rate", "rate"] <= rates.loc["recovery_unordered_rate", "rate"]
@@ -223,10 +284,45 @@ def test_full_pipeline_passes(full):
                                  "monthly:session_conversion"}
 
 
+def _test_section_p_cells(report: str):
+    """All p-value cells in the '## Tests:' tables of a report."""
+    cells, header, in_tests = [], None, False
+    for line in report.splitlines():
+        if line.startswith("## "):
+            header = None
+            in_tests = line.startswith("## Tests:")
+            continue
+        if in_tests and line.startswith("| comparison"):
+            header = [c.strip() for c in line.strip("|").split("|")]
+        elif in_tests and header and line.startswith("| ") and not line.startswith("|---"):
+            vals = [c.strip() for c in line.strip("|").split("|")]
+            cells += [vals[header.index("p_value")], vals[header.index("p_adj_bh")]]
+    return cells
+
+
+def test_report_never_shows_zero_p_values(full):
+    rep = (full["tmp"] / "r1.md").read_text(encoding="utf-8")
+    cells = _test_section_p_cells(rep)
+    assert cells and all(c and c.replace("0", "").replace(".", "") != "" for c in cells)
+    assert "<0.0001" in cells                                       # strong effects exist in this fixture
+    comps = pd.read_csv(full["tmp"] / "c1" / "comparisons.csv")
+    assert {"log10_p_value", "log10_p_adj_bh", "p_value", "p_adj_bh"} <= set(comps.columns)
+
+
 def test_full_pipeline_reproducible(full):
     tmp = full["tmp"]
     assert funnel.run_funnel(full["clean_dir"], tmp / "r2.md", tmp / "c2", day4_dir=None, B=200, batch=50, work_dir=tmp / "w")
     assert _hashes(tmp / "c1") == _hashes(tmp / "c2")
+
+
+def test_successful_run_removes_stale_outputs(full):
+    tmp = full["tmp"]
+    (tmp / "c3").mkdir(exist_ok=True)
+    stale = tmp / "c3" / "session_strict_funnel.csv"                      # e.g. a file from before a rename
+    stale.write_text("old\n", encoding="utf-8")
+    assert funnel.run_funnel(full["clean_dir"], tmp / "r3.md", tmp / "c3", day4_dir=None, B=20, batch=10,
+                             work_dir=tmp / "w")
+    assert not stale.exists() and (tmp / "c3" / "session_nested_funnel.csv").exists()
 
 
 def test_failed_validation_publishes_nothing(full, monkeypatch):
@@ -235,6 +331,12 @@ def test_failed_validation_publishes_nothing(full, monkeypatch):
     assert funnel.run_funnel(full["clean_dir"], tmp / "rf.md", tmp / "cf", day4_dir=None, B=20, batch=10,
                              work_dir=tmp / "w") is False
     assert [p.name for p in (tmp / "cf").glob("*.csv")] == ["00_validations.csv"]
+    keep = tmp / "c4"
+    keep.mkdir(exist_ok=True)
+    (keep / "previous.csv").write_text("kept\n", encoding="utf-8")         # a failed run must not delete outputs
+    assert funnel.run_funnel(full["clean_dir"], tmp / "rf2.md", keep, day4_dir=None, B=20, batch=10,
+                             work_dir=tmp / "w") is False
+    assert (keep / "previous.csv").read_text(encoding="utf-8") == "kept\n"
     assert "**Validation: FAILED**" in (tmp / "rf.md").read_text(encoding="utf-8")
 
 

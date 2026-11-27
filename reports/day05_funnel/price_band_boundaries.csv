@@ -1,0 +1,6 @@
+band,segment,lower_exclusive,upper_inclusive,minimum_median
+1,band_1,,2.29,0.05
+2,band_2,2.29,3.9700000000000006,
+3,band_3,3.9700000000000006,5.559999999999999,
+4,band_4,5.559999999999999,9.51,
+5,band_5,9.51,327.78,

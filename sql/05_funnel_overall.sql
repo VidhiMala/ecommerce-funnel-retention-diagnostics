@@ -6,7 +6,7 @@
 -- Approved decisions (docs/metric_definitions.md §3b): F1-F7, N1-N7, R, S.
 --   Flags per session: V = any view, C = any cart, P = any VALID purchase (A2).
 --   Flags are independent ("at least one"); order is ignored in the primary funnel.
---   Strict funnel = nested sets V -> V&C -> V&C&P.  Rows without a session are excluded
+--   Nested (presence-based) funnel = nested sets V -> V&C -> V&C&P; it checks event PRESENCE, not order.  Rows without a session are excluded
 --   at session level and included at user level.  Purchases need price > 0; views and
 --   carts count at any price.
 -- Tables whose name starts with "_" are internal (bootstrap inputs) and not exported.
@@ -42,8 +42,10 @@ SELECT COUNT(*)                                            AS sessions,
        ROUND(100.0 * COUNT(*) FILTER (WHERE p) / COUNT(*), 4) AS session_conversion_pct
 FROM q__session_flags;
 
--- name: session_strict_funnel
--- View B (primary): nested sets, so conversion + drop-off = 100% at every stage.
+-- name: session_nested_funnel
+-- View B (PRIMARY): nested (presence-based) funnel. Nested sets, so conversion + drop-off = 100%
+-- at every stage. It checks that events are PRESENT in the session, NOT their order (see the
+-- chronological funnel and the first-occurrence order diagnostic below).
 WITH f AS (
     SELECT COUNT(*) FILTER (WHERE v)              AS s1,
            COUNT(*) FILTER (WHERE v AND c)        AS s2,
@@ -61,6 +63,52 @@ SELECT * FROM (
            ROUND(100.0 * s3 / s1, 4) FROM f
 ) ORDER BY stage_order;
 
+-- name: _session_chrono
+-- Chronological session funnel (approved 2026-11-27), alongside the primary nested funnel:
+--   stage 1: a view;
+--   stage 2: a cart AT OR AFTER the session's first view;
+--   stage 3: a valid purchase AT OR AFTER that cart (the earliest such cart, which is optimal:
+--            an ordered path exists iff the earliest cart after the first view is <= the last purchase).
+--   Same-second ties count as ordered.  Product-agnostic, like the nested funnel.
+-- path_b: an INDEPENDENT second computation of "an ordered view <= cart <= valid purchase path
+--   exists": any cart event within [first view, last valid purchase]. Must equal chron_vcp.
+WITH ev AS (
+    SELECT e.session_key, e.event_time, f.first_view_utc, f.last_purchase_utc
+    FROM events e JOIN q__session_flags f USING (session_key)
+    WHERE e.has_session AND e.event_type = 'cart' AND f.v
+),
+cav AS (SELECT session_key, MIN(event_time) AS first_cart_after_view_utc
+        FROM ev WHERE event_time >= first_view_utc GROUP BY session_key),
+pb AS (SELECT DISTINCT session_key FROM ev
+       WHERE event_time >= first_view_utc AND event_time <= last_purchase_utc)
+SELECT f.session_key, f.user_id,
+       c.first_cart_after_view_utc,
+       c.session_key IS NOT NULL                                                AS chron_vc,
+       COALESCE(f.last_purchase_utc >= c.first_cart_after_view_utc, false)      AS chron_vcp,
+       pb.session_key IS NOT NULL                                               AS path_b
+FROM q__session_flags f
+LEFT JOIN cav c USING (session_key)
+LEFT JOIN pb USING (session_key);
+
+-- name: session_chronological_funnel
+-- Alongside the primary funnel: chronological stages, so conversion + drop-off = 100% at each stage.
+WITH f AS (
+    SELECT (SELECT COUNT(*) FROM q__session_flags WHERE v) AS s1,
+           COUNT(*) FILTER (WHERE chron_vc)                 AS s2,
+           COUNT(*) FILTER (WHERE chron_vcp)                AS s3
+    FROM q__session_chrono
+)
+SELECT * FROM (
+    SELECT 1 AS stage_order, 'view' AS stage, s1 AS sessions, NULL::DOUBLE AS conversion_from_previous_pct,
+           NULL::DOUBLE AS dropoff_from_previous_pct, 100.0 AS conversion_from_view_pct FROM f
+    UNION ALL
+    SELECT 2, 'cart at or after first view', s2, ROUND(100.0 * s2 / s1, 4), ROUND(100.0 - 100.0 * s2 / s1, 4),
+           ROUND(100.0 * s2 / s1, 4) FROM f
+    UNION ALL
+    SELECT 3, 'valid purchase at or after that cart', s3, ROUND(100.0 * s3 / s2, 4), ROUND(100.0 - 100.0 * s3 / s2, 4),
+           ROUND(100.0 * s3 / s1, 4) FROM f
+) ORDER BY stage_order;
+
 -- name: session_paths
 -- View C: all 8 combinations of the flags; sums to all sessions.
 SELECT v AS has_view, c AS has_cart, p AS has_valid_purchase,
@@ -73,7 +121,7 @@ ORDER BY has_view DESC, has_cart DESC, has_valid_purchase DESC;
 -- name: session_funnel_metrics
 -- Counts behind the headline session rates (confidence intervals come from the bootstrap).
 SELECT COUNT(*) FILTER (WHERE p)                     AS purchasing_sessions,
-       COUNT(*) FILTER (WHERE p AND NOT (v AND c))   AS purchasing_sessions_outside_strict_funnel,
+       COUNT(*) FILTER (WHERE p AND NOT (v AND c))   AS purchasing_sessions_outside_nested_funnel,
        COUNT(*) FILTER (WHERE p AND NOT c)           AS purchasing_sessions_without_cart,
        COUNT(*) FILTER (WHERE p AND NOT v)           AS purchasing_sessions_without_view,
        COUNT(*) FILTER (WHERE c)                     AS cart_sessions,
@@ -84,17 +132,21 @@ SELECT COUNT(*) FILTER (WHERE p)                     AS purchasing_sessions,
 FROM q__session_flags;
 
 -- name: order_diagnostic
--- N3: among strict-funnel converters, share whose first view <= first cart <= first purchase
--- (same-second ties count as in order).
+-- First-occurrence order (relabelled 2026-11-27; formerly "in time order"): among NESTED-funnel
+-- converters (V & C & P present), the share whose FIRST view <= FIRST cart <= FIRST valid purchase.
+-- This is STRICTER than "an ordered path exists" (e.g. cart, view, cart, purchase has an ordered path
+-- but fails first-occurrence order), so both are shown. Same-second ties count as ordered.
 SELECT COUNT(*)                                                                    AS view_cart_purchase_sessions,
-       COUNT(*) FILTER (WHERE first_view_utc <= first_cart_utc
-                          AND first_cart_utc <= first_purchase_utc)                AS in_time_order,
-       ROUND(100.0 * COUNT(*) FILTER (WHERE first_view_utc <= first_cart_utc
-                          AND first_cart_utc <= first_purchase_utc) / COUNT(*), 4) AS in_time_order_pct,
-       COUNT(*) FILTER (WHERE first_purchase_utc < first_cart_utc)                 AS purchase_before_first_cart,
-       COUNT(*) FILTER (WHERE first_cart_utc < first_view_utc)                     AS cart_before_first_view
-FROM q__session_flags
-WHERE v AND c AND p;
+       COUNT(*) FILTER (WHERE f.first_view_utc <= f.first_cart_utc
+                          AND f.first_cart_utc <= f.first_purchase_utc)            AS in_first_occurrence_order,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE f.first_view_utc <= f.first_cart_utc
+                          AND f.first_cart_utc <= f.first_purchase_utc) / COUNT(*), 4) AS in_first_occurrence_order_pct,
+       COUNT(*) FILTER (WHERE f.first_purchase_utc < f.first_cart_utc)             AS purchase_before_first_cart,
+       COUNT(*) FILTER (WHERE f.first_cart_utc < f.first_view_utc)                 AS cart_before_first_view,
+       COUNT(*) FILTER (WHERE c.chron_vcp)                                         AS with_chronological_path,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE c.chron_vcp) / COUNT(*), 4)            AS with_chronological_path_pct
+FROM q__session_flags f JOIN q__session_chrono c USING (session_key)
+WHERE f.v AND f.c AND f.p;
 
 -- name: _user_flags
 -- User level (F2): all events, including rows without a session.
@@ -113,7 +165,7 @@ SELECT COUNT(*)                                             AS visitors,
        ROUND(100.0 * COUNT(*) FILTER (WHERE up) / COUNT(*), 4) AS user_conversion_pct
 FROM q__user_flags;
 
--- name: user_strict_funnel
+-- name: user_nested_funnel
 WITH f AS (
     SELECT COUNT(*) FILTER (WHERE uv)                AS s1,
            COUNT(*) FILTER (WHERE uv AND uc)         AS s2,
@@ -236,7 +288,7 @@ SELECT m.month_utc,
        f.view_cart_sessions, f.view_cart_purchase_sessions,
        ROUND(100.0 * f.purchasing_sessions / NULLIF(f.sessions, 0), 4)                        AS session_conversion_pct,
        ROUND(100.0 * f.view_cart_sessions / NULLIF(f.sessions_with_view, 0), 4)              AS view_to_cart_pct,
-       ROUND(100.0 * f.view_cart_purchase_sessions / NULLIF(f.view_cart_sessions, 0), 4)    AS cart_to_purchase_strict_pct,
+       ROUND(100.0 * f.view_cart_purchase_sessions / NULLIF(f.view_cart_sessions, 0), 4)    AS cart_to_purchase_nested_pct,
        COALESCE(p.purchasing_sessions_by_first_purchase, 0) AS purchasing_sessions_by_first_purchase,
        COALESCE(f.incoming, 0) AS incoming, COALESCE(p.outgoing, 0) AS outgoing,
        COALESCE(f.purchasing_sessions, 0) - COALESCE(p.purchasing_sessions_by_first_purchase, 0) AS difference
@@ -262,7 +314,7 @@ SELECT month_utc,
        ROUND(100.0 * COUNT(*) FILTER (WHERE up) / COUNT(*), 4)                                        AS user_conversion_pct,
        ROUND(100.0 * COUNT(*) FILTER (WHERE uv AND uc) / NULLIF(COUNT(*) FILTER (WHERE uv), 0), 4)    AS view_to_cart_pct,
        ROUND(100.0 * COUNT(*) FILTER (WHERE uv AND uc AND up)
-             / NULLIF(COUNT(*) FILTER (WHERE uv AND uc), 0), 4)                                       AS cart_to_purchase_strict_pct
+             / NULLIF(COUNT(*) FILTER (WHERE uv AND uc), 0), 4)                                       AS cart_to_purchase_nested_pct
 FROM q__user_month_flags GROUP BY 1 ORDER BY 1;
 
 -- name: sensitivity
@@ -277,7 +329,7 @@ sc AS (
 SELECT ord, scenario, COUNT(*) AS sessions, COUNT(*) FILTER (WHERE p) AS purchasing_sessions,
        ROUND(100.0 * COUNT(*) FILTER (WHERE p) / COUNT(*), 4)                                       AS session_conversion_pct,
        ROUND(100.0 * COUNT(*) FILTER (WHERE v AND c) / COUNT(*) FILTER (WHERE v), 4)                AS view_to_cart_pct,
-       ROUND(100.0 * COUNT(*) FILTER (WHERE v AND c AND p) / COUNT(*) FILTER (WHERE v AND c), 4)    AS cart_to_purchase_strict_pct,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE v AND c AND p) / COUNT(*) FILTER (WHERE v AND c), 4)    AS cart_to_purchase_nested_pct,
        (SELECT p999 FROM t)                                                                         AS events_threshold_p999
 FROM sc GROUP BY ord, scenario ORDER BY ord;
 
@@ -303,8 +355,10 @@ SELECT i.u_pos,
        COUNT(*) FILTER (WHERE p)              AS p,
        COUNT(*) FILTER (WHERE v AND c)        AS vc,
        COUNT(*) FILTER (WHERE v AND c AND p)  AS vcp,
-       COUNT(*) FILTER (WHERE c AND p)        AS cp
-FROM q__session_flags s JOIN q__user_index i USING (user_id)
+       COUNT(*) FILTER (WHERE c AND p)        AS cp,
+       COUNT(*) FILTER (WHERE ch.chron_vc)    AS vc_chron,
+       COUNT(*) FILTER (WHERE ch.chron_vcp)   AS vcp_chron
+FROM q__session_flags s JOIN q__session_chrono ch USING (session_key) JOIN q__user_index i ON i.user_id = s.user_id
 GROUP BY i.u_pos;
 
 -- name: _user_month_counts

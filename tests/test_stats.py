@@ -177,3 +177,52 @@ def test_check_rates_flags_invalid():
     with pytest.raises(ValueError):
         stats.Base("neg", [0], [-1])
 
+
+def test_log10_p_matches_and_does_not_underflow():
+    from scipy.stats import norm
+    for z in [0.0, 1.0, 1.96, 5.0, 20.0]:
+        assert np.isclose(stats.log10_two_sided_p(z), np.log10(min(1.0, 2 * norm.sf(z))), atol=1e-12)
+    for z in [38.0, 50.0, 200.0]:
+        assert 2 * norm.sf(z) == 0.0                                    # float64 underflow
+        lp = stats.log10_two_sided_p(z)
+        assert np.isfinite(lp) and lp < -300                            # log space stays exact
+    assert stats.log10_two_sided_p(60.0) < stats.log10_two_sided_p(50.0)   # ordering preserved
+
+
+def test_bh_log10_equals_statsmodels_where_representable():
+    rng = np.random.default_rng(7)
+    for _ in range(20):
+        p = np.concatenate([rng.uniform(0, 1, 15), rng.uniform(0, 1e-6, 5), [0.02, 0.02]])  # includes ties
+        ref = stats.bh_adjust(p)
+        got = stats.bh_adjust_log10(np.log10(p))
+        assert np.allclose(got, np.log10(ref), atol=1e-12)
+
+
+def test_bh_log10_with_underflowed_values():
+    lp = np.array([-500.0, -400.0, -2.0, -0.5])
+    adj = stats.bh_adjust_log10(lp)
+    m = 4
+    # hand-computed step-up: rank 4 -> -0.5; rank 3 -> min(-2 + log10(4/3), -0.5)
+    assert np.isclose(adj[3], -0.5) and np.isclose(adj[2], -2 + np.log10(m / 3))
+    assert np.isclose(adj[0], -500 + np.log10(m / 1)) and np.isclose(adj[1], -400 + np.log10(m / 2))
+    assert np.all(np.isfinite(adj)) and np.all(adj >= lp - 1e-12) and np.all(adj <= 0)
+    assert np.all(np.diff(adj[np.argsort(lp)]) >= -1e-12)                # monotone in the raw ordering
+
+
+def test_format_p_display_rule():
+    cases = {0.03: "0.03", 0.00012: "0.00012", 0.0001: "0.0001", 0.123456: "0.1235", 1.0: "1",
+             9.99e-5: "<0.0001", 1e-300: "<0.0001", 0.0: "<0.0001"}
+    for p, shown in cases.items():
+        assert stats.format_p(p) == shown
+    assert stats.format_p(float("nan")) == ""
+
+
+def test_compare_rates_extreme_effect_underflows_only_the_float_column():
+    n = 200000
+    specs = [spec_from_dense("hi", np.r_[np.ones(n // 10 * 9), np.zeros(n // 10)], np.ones(n)),
+             spec_from_dense("lo", np.r_[np.ones(n // 10), np.zeros(n // 10 * 9)], np.ones(n))]
+    boot = stats.poisson_bootstrap(specs, n, B=100, seed=1, batch=50)
+    r = stats.compare_rates([("hi-lo", 0, 1, "f")], stats.point_estimates(specs), boot).iloc[0]
+    assert r.z > 38 and r.p_value == 0.0 and r.p_adj_bh == 0.0          # float columns underflow
+    assert np.isfinite(r.log10_p_value) and r.log10_p_value < -300       # log columns stay exact
+    assert r.significant_bh and r.meaningful and stats.format_p(r.p_adj_bh) == "<0.0001"

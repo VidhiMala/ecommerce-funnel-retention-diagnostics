@@ -1,0 +1,2 @@
+carting_users,carting_buyers,within_session_buyers,unordered_cross_session_buyers,ordered_cross_session_recovered,overlap_within_and_unordered,unordered_but_not_ordered,within_session_rate_pct,unordered_recovery_rate_pct,ordered_recovery_rate_pct
+337551,91808,78381,61408,57454,47981,3954,23.2205,18.1922,17.0208

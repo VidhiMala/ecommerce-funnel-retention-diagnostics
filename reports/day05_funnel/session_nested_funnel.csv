@@ -1,0 +1,4 @@
+stage_order,stage,sessions,conversion_from_previous_pct,dropoff_from_previous_pct,conversion_from_view_pct
+1,view,3411359,,,100.0
+2,view + cart,642898,18.8458,81.1542,18.8458
+3,view + cart + valid purchase,86873,13.5127,86.4873,2.5466

@@ -116,9 +116,9 @@ Approvals: F1–F7 (2026-11-24); N1–N7, R, S and four corrections to the metho
 | F5 | **Segments:** top 10 categories / brands by estimated revenue (same rule as Day 4); every other category or known brand → "other"; missing brand → "unknown" (never ranked) |
 | F6 | ~~Wilson CI; chi-square across segments; z-tests~~ **Superseded by S (2026-11-27)**: the user-clustered bootstrap below. Wilson intervals are kept only as a naive reference. |
 | F7 | **Meaningful** = BH-adjusted p < 0.05 **and** \|difference\| ≥ **1 percentage point**. Both shown. |
-| N1 | Three views: **stage reach** (share of all sessions), **strict nested funnel** V → V∩C → V∩C∩P (**primary**, so conversion + drop-off = 100%), and the **8-way path breakdown** |
+| N1 | Three views: **stage reach** (share of all sessions), **nested (presence-based) funnel** V → V∩C → V∩C∩P (**primary**, so conversion + drop-off = 100%), and the **8-way path breakdown**. *(Renamed 2026-11-27 from "strict nested funnel": it checks event **presence**, not order. Values unchanged.)* |
 | N2 | View and cart count at any price; purchase needs price > 0 |
-| N3 | Primary funnel ignores order. Diagnostic: share of V∩C∩P sessions with first view ≤ first cart ≤ first purchase (same-second ties count as in order). |
+| N3 | The primary funnel ignores order. **Chronological session funnel alongside it** (approved 2026-11-27): view → a cart at or after the session's first view → a valid purchase at or after that cart; same-second ties count as ordered. Diagnostic, relabelled **first-occurrence order**: share of V∩C∩P sessions with first view ≤ first cart ≤ first purchase, shown next to the count of sessions with **any** chronological path (first-occurrence order is stricter). |
 | N4 | **Monthly session funnel:** each session, with all its flags, belongs to the month of its **first event** |
 | N5 | User funnel over the whole period and calendar months; rows without a session are included at user level |
 | N6 | Sensitivity (nothing removed): without sessions over 24 h; without the top 0.1% of sessions by events; first-day (2019-10-01) check |
@@ -130,13 +130,16 @@ Approvals: F1–F7 (2026-11-24); N1–N7, R, S and four corrections to the metho
 | Metric | Definition |
 |---|---|
 | Session conversion | \|P\| ÷ all sessions: identical to Day 4 |
-| Strict view → cart | \|V∩C\| ÷ \|V\| |
-| Strict cart → purchase | \|V∩C∩P\| ÷ \|V∩C\| |
-| Strict view → purchase | \|V∩C∩P\| ÷ \|V\| |
+| Nested view → cart | \|V∩C\| ÷ \|V\| (presence-based) |
+| Nested cart → purchase | \|V∩C∩P\| ÷ \|V∩C\| (presence-based) |
+| Nested view → purchase | \|V∩C∩P\| ÷ \|V\| (presence-based) |
+| Chronological view → cart | Sessions with a cart **at or after the first view** ÷ sessions with a view |
+| Chronological cart → purchase | Sessions with a valid purchase **at or after the earliest cart that follows the first view** ÷ sessions with such a cart. An ordered view ≤ cart ≤ purchase path exists exactly when this holds. Same-second ties are ordered. A subset of the nested funnel at every stage; product-agnostic. |
+| Chronological view → purchase | Chronological stage 3 ÷ sessions with a view |
 | Drop-off at a stage | 100% − that stage's conversion |
 | Cart → purchase, any view (F1 rate) | \|C∩P\| ÷ \|C\| |
-| Purchases outside the strict funnel | \|P \ (V∩C)\| ÷ \|P\| |
-| User conversion | buyers ÷ visitors (identical to Day 4); user strict rates as above, per user |
+| Purchases outside the nested funnel | \|P \ (V∩C)\| ÷ \|P\| |
+| User conversion | buyers ÷ visitors (identical to Day 4); user nested (presence-based) rates as above, per user |
 | **Carting users** | Users with ≥ 1 cart event **in a session**. A cart only in a row without a session doesn't count, because recovery needs sessions. |
 | Within-session buyers | Carting users with ≥ 1 session containing both a cart and a valid purchase |
 | **Unordered cross-session buyers** | Carting users with a cart in session *s₁* and a valid purchase in a **different** session *s₂* (`session_key` differs; same `user_id`) |
@@ -155,7 +158,11 @@ Approvals: F1–F7 (2026-11-24); N1–N7, R, S and four corrections to the metho
   - the top-10 category and brand lists
 - **Consistency:**
   - each path breakdown adds up to its total
-  - strict funnels never increase, and conversion + drop-off = 100%
+  - nested and chronological funnels never increase, and conversion + drop-off = 100%
+- **Chronological funnel:**
+  - two independent computations of "an ordered path exists" agree for every session (earliest cart after the first view ≤ last valid purchase; any cart within [first view, last valid purchase])
+  - every chronological stage is a subset of the nested stage
+  - first-occurrence order ≤ chronological path ≤ nested converters
 - **Recovery:**
   - unordered and ordered are **each** computed two independent ways, and the two agree for every user
   - ordered ⊆ unordered
@@ -175,7 +182,9 @@ Approvals: F1–F7 (2026-11-24); N1–N7, R, S and four corrections to the metho
   - no failed resamples
   - interval bounds are finite, low ≤ high, and within [0, 1]
   - standard errors > 0
-  - p-values are valid, and BH-adjusted p ≥ raw p
+  - log10 p-values finite and ≤ 0; log10 BH-adjusted ≥ log10 raw
+  - log-space BH = statsmodels wherever p is representable
+  - no p-value is displayed as an exact-looking zero
   - the "meaningful" flag follows F7
   - point estimates equal the SQL tables
 
@@ -184,10 +193,11 @@ Approvals: F1–F7 (2026-11-24); N1–N7, R, S and four corrections to the metho
 | File / column | Meaning |
 |---|---|
 | `session_stage_reach`, `user_stage_reach` | Stage reach (view A). `session_conversion_pct` / `user_conversion_pct` match Day 4. |
-| `session_strict_funnel`, `user_strict_funnel` | Strict funnel (view B): `conversion_from_previous_pct`, `dropoff_from_previous_pct`, `conversion_from_view_pct` |
+| `session_nested_funnel`, `user_nested_funnel` | Nested (presence-based) funnel, view B, primary: `conversion_from_previous_pct`, `dropoff_from_previous_pct`, `conversion_from_view_pct` *(renamed from `*_strict_funnel`)* |
+| `session_chronological_funnel` | Chronological session funnel, same columns (alongside the primary) |
 | `session_paths`, `user_paths` | All V/C/P combinations present; `share_pct` of the total |
-| `session_funnel_metrics` | Supporting counts: purchases outside the strict funnel, without cart / view, cart sessions with a removal, single-event sessions |
-| `order_diagnostic` | Time-order check of strict-funnel converters |
+| `session_funnel_metrics` | Supporting counts: purchases outside the nested funnel (`purchasing_sessions_outside_nested_funnel`), without cart / view, cart sessions with a removal, single-event sessions |
+| `order_diagnostic` | Among nested-funnel converters: `in_first_occurrence_order` (+ `_pct`; renamed from `in_time_order`), `purchase_before_first_cart`, `cart_before_first_view`, `with_chronological_path` (+ `_pct`) |
 | `recovery_summary` | Carting users, carting buyers, within-session, unordered, ordered, overlap, rates |
 | `monthly_session_funnel` | By first-event month: counts and rates, plus `purchasing_sessions_by_first_purchase`, `incoming`, `outgoing`, `difference` |
 | `monthly_user_funnel` | Users active in each month and their stages |
@@ -195,7 +205,8 @@ Approvals: F1–F7 (2026-11-24); N1–N7, R, S and four corrections to the metho
 | `price_band_boundaries`, `price_band_products`, `price_band_no_valid_price_sessions` | Band edges, products per band, and sessions touching unbanded products |
 | `sensitivity`, `start_of_data_check` | N6 checks |
 | `rates_with_ci.csv` | Every rate: `numerator`, `denominator`, `rate`, `ci_low`/`ci_high` (clustered percentile), `se_boot`, `wilson_low`/`wilson_high` (naive), `design_effect` |
-| `comparisons.csv` | Every test: `diff_pp`, `diff_ci_low_pp`/`diff_ci_high_pp`, `se_boot_pp`, `z`, `p_value`, `p_adj_bh`, `significant_bh`, `meaningful` |
+| `comparisons.csv` | Every test: `diff_pp`, `diff_ci_low_pp`/`diff_ci_high_pp`, `se_boot_pp`, `z`, **`log10_p_value`, `log10_p_adj_bh`** (exact, computed in log space), `p_value`, `p_adj_bh` (= 10^log10, kept for compatibility; **underflow to 0.0 below ~1e-308**, i.e. \|z\| > ~37.5), `significant_bh` (decided on the log10 values), `meaningful` |
+| *(display rule)* | In reports, raw and adjusted p-values < 0.0001 are shown as **"<0.0001"**, otherwise to 4 significant figures. A rounded or underflowed zero is never displayed. |
 
 ## 4. Cart abandonment window ⏳ (decision pending: options for review)
 
@@ -227,6 +238,7 @@ So "cart without purchase in the same session" will overstate abandonment by an 
 | Date | Change |
 |---|---|
 | 2026-11-16 | Approved: UTC; order proxy; estimated revenue |
+| 2026-11-27 | Day 5 audit: "strict" funnel renamed **nested (presence-based)**, still primary, values unchanged. **Chronological session funnel** added alongside. Diagnostic relabelled **first-occurrence order** + chronological-path count. p-values in **log space** (log10 columns); display "<0.0001"; underflow documented. |
 | 2026-11-27 | Day 5 funnel method finalised (§3b): N1–N7, R (ordered primary), S (clustered bootstrap; F6 superseded), F4 corrected (product medians → quintiles across products), recovery identity and monthly incoming/outgoing reconciliation, bootstrap checks without the inside-interval requirement. |
 | 2026-11-24 | Day 4 audit follow-ups: column dictionary (§3a); duplicate-copies clarification; monthly AOV limitation; R1 `products_sold` → `distinct_products_purchased`; R2 `share_of_known_brand_revenue_pct`; R3 `dup_purchase_copies_all`. No change to revenue, purchasing-session or conversion calculations. |
 | 2026-11-24 | Day 4 metrics approved (D1–D4). Session month attribution (first event) approved. Day 5 funnel decisions F1–F7 approved (F7: 1 pp + significant after correction). |

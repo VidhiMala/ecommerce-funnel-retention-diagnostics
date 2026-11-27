@@ -29,7 +29,9 @@ rate_values                  rates from base sums (point or bootstrap)
 check_rates                  per-user validity: 0 <= numerator <= denominator
 summarise_rates              point, percentile CI, bootstrap SE, Wilson CI, design effect
 compare_rates                differences: Wald z with bootstrap SE, percentile CI, BH, F7 flag
+                             (p-values in log10 space; no underflow)
 wilson_ci, bh_adjust         helpers
+bh_adjust_log10, format_p    log-space BH; report display rule ('<0.0001')
 RatioSpec, poisson_bootstrap simple one-numerator/one-denominator convenience wrapper
 """
 from __future__ import annotations
@@ -62,6 +64,44 @@ def wilson_ci(k, n, alpha: float = ALPHA):
         centre = (p + z * z / (2 * n)) / den
         half = z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / den
     return centre - half, centre + half
+
+
+P_DISPLAY_FLOOR = 1e-4      # report display: p < 0.0001 is shown as "<0.0001" (never a rounded 0)
+_LOG10_E = np.log10(np.e)
+
+
+def log10_two_sided_p(z) -> np.ndarray:
+    """log10 of the two-sided normal p-value, exact for any |z| (no underflow): log10(2 * sf(|z|))."""
+    z = np.abs(np.asarray(z, dtype=float))
+    with np.errstate(invalid="ignore"):
+        return (np.log(2.0) + norm.logsf(z)) * _LOG10_E
+
+
+def bh_adjust_log10(log10_p) -> np.ndarray:
+    """Benjamini-Hochberg in log10 space (same step-up formula as statsmodels 'fdr_bh'):
+    adj_(i) = min_{j >= i} p_(j) * m / j, capped at 1. Exact even when p underflows float64."""
+    lp = np.asarray(log10_p, dtype=float)
+    m = len(lp)
+    if m == 0:
+        return lp
+    order = np.argsort(lp, kind="mergesort")
+    ranks = np.arange(1, m + 1)
+    scaled = lp[order] + np.log10(m) - np.log10(ranks)
+    adj_sorted = np.minimum.accumulate(scaled[::-1])[::-1]
+    out = np.empty(m)
+    out[order] = np.minimum(adj_sorted, 0.0)
+    return out
+
+
+def format_p(p) -> str:
+    """Display rule (approved 2026-11-27): p < 0.0001 -> '<0.0001'; otherwise 4 significant figures.
+    Never shows an exact-looking 0 produced by rounding or floating-point underflow."""
+    if p is None or (isinstance(p, float) and np.isnan(p)):
+        return ""
+    p = float(p)
+    if p < P_DISPLAY_FLOOR:
+        return "<0.0001"
+    return f"{p:.4g}"
 
 
 def bh_adjust(pvals) -> np.ndarray:
@@ -196,30 +236,40 @@ def summarise_rates(rates: list[Rate], point_sums: np.ndarray, boot: np.ndarray,
 def compare_rates(pairs: list[tuple[str, int, int, str]], point: np.ndarray, boot: np.ndarray,
                   alpha: float = ALPHA, practical_pp: float = PRACTICAL_PP) -> pd.DataFrame:
     """Differences rate[a] - rate[b] for (label, a, b, family): Wald z with bootstrap SE
-    (two-sided), percentile CI, Benjamini-Hochberg within family, F7 'meaningful' flag."""
+    (two-sided), percentile CI, Benjamini-Hochberg within family, F7 'meaningful' flag.
+
+    p-values are computed in LOG SPACE (log10_p_value, log10_p_adj_bh: exact for any z).
+    p_value / p_adj_bh = 10 ** log10 values, kept for compatibility: they underflow to 0.0
+    below ~1e-308 (|z| > ~37.5). Significance is decided on the log10 values.
+    """
     rows = []
     for label, a, b, family in pairs:
         d_boot = boot[:, a] - boot[:, b]
         diff = point[a] - point[b]
         se = np.nanstd(d_boot, ddof=1)
         z = diff / se if se > 0 else np.nan
-        pval = 2 * norm.sf(abs(z)) if np.isfinite(z) else np.nan
         lo, hi = np.nanpercentile(d_boot, [100 * alpha / 2, 100 * (1 - alpha / 2)])
         rows.append({"comparison": label, "family": family, "rate_a": point[a], "rate_b": point[b],
                      "diff_pp": 100 * diff, "diff_ci_low_pp": 100 * lo, "diff_ci_high_pp": 100 * hi,
-                     "se_boot_pp": 100 * se, "z": z, "p_value": pval})
+                     "se_boot_pp": 100 * se, "z": z})
     df = pd.DataFrame(rows)
     if df.empty:
         return df
-    df["p_adj_bh"] = np.nan
+    df["log10_p_value"] = log10_two_sided_p(df["z"])            # NaN when z is NaN
+    df["log10_p_adj_bh"] = np.nan
     for _, idx in df.groupby("family").groups.items():
-        sub = df.loc[idx, "p_value"]
+        sub = df.loc[idx, "log10_p_value"]
         ok = sub.notna()
         if ok.any():
-            df.loc[sub[ok].index, "p_adj_bh"] = bh_adjust(sub[ok].to_numpy())
-    df["significant_bh"] = df["p_adj_bh"] < alpha
+            df.loc[sub[ok].index, "log10_p_adj_bh"] = bh_adjust_log10(sub[ok].to_numpy())
+    with np.errstate(under="ignore"):
+        df["p_value"] = np.power(10.0, df["log10_p_value"])
+        df["p_adj_bh"] = np.power(10.0, df["log10_p_adj_bh"])
+    df["significant_bh"] = df["log10_p_adj_bh"] < np.log10(alpha)
     df["meaningful"] = df["significant_bh"] & (df["diff_pp"].abs() >= practical_pp)
-    return df
+    cols = ["comparison", "family", "rate_a", "rate_b", "diff_pp", "diff_ci_low_pp", "diff_ci_high_pp",
+            "se_boot_pp", "z", "p_value", "p_adj_bh", "log10_p_value", "log10_p_adj_bh", "significant_bh", "meaningful"]
+    return df[cols]
 
 
 # --------------------------------------------------------------------------- convenience

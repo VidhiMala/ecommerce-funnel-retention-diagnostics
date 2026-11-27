@@ -1,0 +1,64 @@
+validation,expected,actual,result
+sessions: one user per session_key,0,0,PASS
+session_key = user_id ':' user_session prefix for every session,0,0,PASS
+session paths sum to all sessions,3614959,3614959,PASS
+user paths sum to all users,1341499,1341499,PASS
+session_nested_funnel: never increases,True,True,PASS
+session_nested_funnel: conversion + drop-off = 100 at every stage,0,0,PASS
+user_nested_funnel: never increases,True,True,PASS
+user_nested_funnel: conversion + drop-off = 100 at every stage,0,0,PASS
+session_chronological_funnel: never increases,True,True,PASS
+session_chronological_funnel: conversion + drop-off = 100 at every stage,0,0,PASS
+session purchases = A2 purchasing sessions (direct count),126503,126503,PASS
+chronological: two independent path computations agree for every session,0,0,PASS
+chronological: each stage is a subset of the nested (presence-based) stage,0,0,PASS
+chronological: one row per session,3614959,3614959,PASS
+order diagnostic: first-occurrence order <= chronological path <= nested converters,True,True,PASS
+order diagnostic: chronological-path count = chronological funnel stage 3,82330,82330,PASS
+order diagnostic: out of first-occurrence order = cart-before-view + purchase-before-cart - both,0,0,PASS
+recovery: unordered method A = method B (every user),0,0,PASS
+recovery: ordered method A = method B (every user),0,0,PASS
+recovery: ordered is a subset of unordered,0,0,PASS
+recovery: carting buyers = within-session + unordered cross-session - overlap,True,True,PASS
+recovery: every recovered user is a carting buyer,0,0,PASS
+"monthly: P(first event) - P(first purchase) = incoming - outgoing, every month",0,0,PASS
+monthly: sum incoming = sum outgoing,True,True,PASS
+monthly: both attributions total the same purchasing sessions,True,True,PASS
+monthly: sessions sum to all sessions,3614959,3614959,PASS
+price bands: boundaries strictly increasing,True,True,PASS
+price bands: every product in exactly one band or 'no valid price',51428,51428,PASS
+price bands: one row per product,0,0,PASS
+price bands: 'no valid price' = products with no positive price,769,769,PASS
+price bands: each band agrees with its median and the boundaries,0,0,PASS
+"category: rates within [0, 100]",0,0,PASS
+category: each segment's sessions <= family sessions,0,0,PASS
+"brand: rates within [0, 100]",0,0,PASS
+brand: each segment's sessions <= family sessions,0,0,PASS
+"price_band: rates within [0, 100]",0,0,PASS
+price_band: each segment's sessions <= family sessions,0,0,PASS
+category/brand families cover every session,True,True,PASS
+"Day 4: sessions, purchasing sessions, visitors, buyers",3614959/126503/1341499/92652,3614959/126503/1341499/92652,PASS
+Day 4: session and user conversion (4 dp),3.4994/6.9066,3.4994/6.9066,PASS
+"Day 4: monthly sessions, visitors, buyers; purchasing sessions by first purchase",0,0,PASS
+Day 4: category top-10 segments identical to Day 4,"['1487580005092295511', '1487580005268456287', '1487580005595612013', '1487580006300255120', '1487580006317032337', '1487580006350586771', '1487580008246412266', '1487580009051717646', '1487580013950664926', '1602943681873052386']","['1487580005092295511', '1487580005268456287', '1487580005595612013', '1487580006300255120', '1487580006317032337', '1487580006350586771', '1487580008246412266', '1487580009051717646', '1487580013950664926', '1602943681873052386']",PASS
+Day 4: brand top-10 segments identical to Day 4,"['cnd', 'estel', 'grattol', 'ingarden', 'irisk', 'jessnail', 'masura', 'runail', 'strong', 'uno']","['cnd', 'estel', 'grattol', 'ingarden', 'irisk', 'jessnail', 'masura', 'runail', 'strong', 'uno']",PASS
+rates: every rate valid per user (0 <= numerator <= denominator),[],[],PASS
+bootstrap: all-ones weights reproduce the exact totals (rel. 1e-5),True,True,PASS
+bootstrap: first batch identical when re-run with the same seed,True,True,PASS
+bootstrap: no failed replicates (NaN),0,0,PASS
+"bootstrap: CI bounds finite, low <= high, within [0, 1]",0,0,PASS
+bootstrap: standard errors finite and > 0,0,0,PASS
+"comparisons: difference CI bounds finite, low <= high, within [-100, 100] pp",0,0,PASS
+comparisons: log10 p finite and <= 0; log10 BH-adjusted >= log10 raw and <= 0,0,0,PASS
+comparisons: log-space BH = statsmodels wherever p is representable,0,0,PASS
+comparisons: p_value / p_adj_bh = 10 ** log10 columns (0.0 only where < ~1e-308),0,0,PASS
+comparisons: 'meaningful' = BH-significant AND |difference| >= 1 pp,0,0,PASS
+report: no p-value displayed as an exact-looking zero,0,0,PASS
+point estimate = SQL table: session_conversion,3.4994,3.4994,PASS
+point estimate = SQL table: user_conversion,6.9066,6.9066,PASS
+point estimate = SQL table: session_view_to_cart_nested,18.8458,18.8458,PASS
+point estimate = SQL table: session_cart_to_purchase_nested,13.5127,13.5127,PASS
+point estimate = SQL table: session_view_to_cart_chronological,17.3493,17.3493,PASS
+point estimate = SQL table: session_cart_to_purchase_chronological,13.9107,13.9107,PASS
+point estimate = SQL table: recovery_ordered_rate,17.0208,17.0208,PASS
+point estimate = SQL table: recovery_unordered_rate,18.1922,18.1922,PASS
